@@ -4,6 +4,7 @@ import axios from 'axios';
 export const useWeatherStore = defineStore('weather', {
   state: () => ({
     currentWeather: null,
+    farmsWeather: {}, // Cache for farm-specific weather { farmId: { data: ..., timestamp: ... } }
     forecast: [],
     weatherHistory: [],
     alerts: [],
@@ -14,7 +15,7 @@ export const useWeatherStore = defineStore('weather', {
   getters: {
     hasWeatherData: (state) => !!state.currentWeather,
     criticalAlerts: (state) => state.alerts.filter(alert => alert.severity === 'critical'),
-    weatherWarnings: (state) => state.alerts.filter(alert => 
+    weatherWarnings: (state) => state.alerts.filter(alert =>
       [
         'heavy_rain',
         'drought',
@@ -27,14 +28,32 @@ export const useWeatherStore = defineStore('weather', {
   },
 
   actions: {
-    async fetchCurrentWeather(fieldId) {
+    async fetchCurrentWeather(farmId, force = false) {
+      // Check cache first (10 minute TTL)
+      const now = Date.now();
+      const cached = this.farmsWeather[farmId];
+      if (!force && cached && (now - cached.timestamp < 10 * 60 * 1000)) {
+        this.currentWeather = cached.data;
+        return { weather: cached.data, alerts: cached.alerts };
+      }
+
       this.loading = true;
       try {
-        const response = await axios.get(`/api/weather/fields/${fieldId}/current`);
-        this.currentWeather = response.data.weather;
+        const response = await axios.get(`/api/weather/farms/${farmId}/current`);
+        const weatherData = response.data.weather;
+
+        this.currentWeather = weatherData;
         if (response.data.alerts) {
           this.alerts = response.data.alerts;
         }
+
+        // Update cache
+        this.farmsWeather[farmId] = {
+          data: weatherData,
+          alerts: response.data.alerts || [],
+          timestamp: now
+        };
+
         return response.data;
       } catch (error) {
         this.error = error.response?.data?.message || 'Failed to fetch current weather';
@@ -44,13 +63,16 @@ export const useWeatherStore = defineStore('weather', {
       }
     },
 
-    async fetchForecast(fieldId, days = 7) {
+    async fetchForecast(farmId, days = 7) {
       this.loading = true;
       try {
-        const response = await axios.get(`/api/weather/fields/${fieldId}/forecast`, {
+        const response = await axios.get(`/api/weather/farms/${farmId}/forecast`, {
           params: { days }
         });
-        this.forecast = response.data.forecast || [];
+        // Backend returns { forecast: { daily_forecasts: [...], summary: {...} }, ... }
+        // Extract the daily_forecasts array for the UI
+        const forecastData = response.data.forecast || {};
+        this.forecast = forecastData.daily_forecasts || forecastData || [];
         return response.data;
       } catch (error) {
         this.error = error.response?.data?.message || 'Failed to fetch forecast';
@@ -62,11 +84,18 @@ export const useWeatherStore = defineStore('weather', {
       }
     },
 
-    async fetchWeatherHistory(fieldId, days = 30) {
+    async fetchWeatherHistory(farmId, days = 30) {
       this.loading = true;
       try {
-        const response = await axios.get(`/api/weather/fields/${fieldId}/history?days=${days}`);
-        this.weatherHistory = response.data.history;
+        const response = await axios.get(`/api/weather/farms/${farmId}/history`, {
+          params: { days, per_page: 5000 }
+        });
+        // Handle paginated or direct response structure
+        if (response.data.weather_logs) {
+          this.weatherHistory = response.data.weather_logs.data || response.data.weather_logs;
+        } else {
+          this.weatherHistory = response.data.data || response.data.history || [];
+        }
         return response.data;
       } catch (error) {
         this.error = error.response?.data?.message || 'Failed to fetch weather history';
@@ -76,10 +105,10 @@ export const useWeatherStore = defineStore('weather', {
       }
     },
 
-    async fetchWeatherAlerts(fieldId) {
+    async fetchWeatherAlerts(farmId) {
       this.loading = true;
       try {
-        const response = await axios.get(`/api/weather/fields/${fieldId}/alerts`);
+        const response = await axios.get(`/api/weather/farms/${farmId}/alerts`);
         this.alerts = response.data.alerts;
         return response.data;
       } catch (error) {
@@ -90,10 +119,10 @@ export const useWeatherStore = defineStore('weather', {
       }
     },
 
-    async updateWeather(fieldId, weatherData) {
+    async updateWeather(farmId, weatherData) {
       this.loading = true;
       try {
-        const response = await axios.post(`/api/weather/fields/${fieldId}/update`, weatherData);
+        const response = await axios.post(`/api/weather/farms/${farmId}/update`, weatherData);
         return response.data;
       } catch (error) {
         this.error = error.response?.data?.message || 'Failed to update weather';

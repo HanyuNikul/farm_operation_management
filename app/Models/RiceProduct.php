@@ -13,6 +13,7 @@ class RiceProduct extends Model
         'farmer_id',
         'rice_variety_id',
         'harvest_id',
+        'inventory_item_id',
         'name',
         'description',
         'quantity_available',
@@ -59,6 +60,49 @@ class RiceProduct extends Model
     ];
 
     /**
+     * Get the images attribute with normalized URLs.
+     * Converts legacy full URLs to relative paths for cross-environment compatibility.
+     *
+     * @param mixed $value
+     * @return array|null
+     */
+    public function getImagesAttribute($value): ?array
+    {
+        if (empty($value)) {
+            return null;
+        }
+
+        // Decode JSON if it's a string
+        $images = is_string($value) ? json_decode($value, true) : $value;
+
+        if (!is_array($images)) {
+            return null;
+        }
+
+        // Normalize each image URL
+        return array_map(function ($url) {
+            if (empty($url)) {
+                return null;
+            }
+
+            // If already a relative path, return as-is
+            if (str_starts_with($url, '/storage/')) {
+                return $url;
+            }
+
+            // Extract relative path from full URL (legacy data)
+            // Handles URLs like "http://127.0.0.1:8000/storage/products/file.jpg"
+            if (preg_match('#/storage/(products/[^?]+)#', $url, $matches)) {
+                return '/storage/' . $matches[1];
+            }
+
+            // Fallback: return original if we can't parse it
+            return $url;
+        }, $images);
+    }
+
+
+    /**
      * Quality grade constants
      */
     const GRADE_PREMIUM = 'premium';
@@ -70,8 +114,6 @@ class RiceProduct extends Model
      * Processing method constants
      */
     const PROCESSING_MILLED = 'milled';
-    const PROCESSING_BROWN = 'brown';
-    const PROCESSING_PARBOILED = 'parboiled';
     const PROCESSING_ORGANIC = 'organic';
 
     /**
@@ -114,6 +156,134 @@ class RiceProduct extends Model
     }
 
     /**
+     * Get the inventory item for this product
+     */
+    public function inventoryItem()
+    {
+        return $this->belongsTo(InventoryItem::class);
+    }
+
+    /**
+     * Attempt to find a matching inventory item for this product
+     */
+    public function findMatchingInventoryItem()
+    {
+        // 1. Return explicitly linked item if exists
+        if ($this->inventory_item_id) {
+            return $this->inventoryItem;
+        }
+
+        $baseQuery = InventoryItem::where('user_id', $this->farmer_id)
+            ->where('category', InventoryItem::CATEGORY_PRODUCE)
+            ->where('unit', $this->unit);
+
+        // 2. Prefer inventory generated from the linked harvest's latest processed output
+        foreach ($this->preferredInventoryNames() as $candidateName) {
+            $match = (clone $baseQuery)->where('name', $candidateName)->first();
+            if ($match) {
+                return $match;
+            }
+
+            $match = (clone $baseQuery)->where('name', 'ILIKE', $candidateName)->first();
+            if ($match) {
+                return $match;
+            }
+        }
+
+        // 3. Try to find by exact name match for this farmer
+        $match = (clone $baseQuery)->where('name', $this->name)->first();
+        if ($match) {
+            return $match;
+        }
+
+        // 4. Try case-insensitive exact name match
+        $match = (clone $baseQuery)->where('name', 'ILIKE', $this->name)->first();
+        if ($match) {
+            return $match;
+        }
+
+        // 5. Try partial match — product name contained in inventory item name
+        //    e.g., product "IR64" matches inventory "IR64 (Premium)"
+        $match = (clone $baseQuery)->where('name', 'ILIKE', $this->name . '%')->first();
+        if ($match) {
+            return $match;
+        }
+
+        // 6. Try partial match — inventory item name contained in product name
+        //    e.g., inventory "IR64" matches product "IR64 Premium Rice"
+        $match = (clone $baseQuery)->whereRaw('? ILIKE name || \'%\'', [$this->name])->first();
+        if ($match) {
+            return $match;
+        }
+
+        // 7. Try variety name with (Grade X) suffix (common pattern in HarvestController)
+        $varietyName = $this->riceVariety?->name;
+        if ($varietyName) {
+            $match = (clone $baseQuery)->where('name', 'ILIKE', $varietyName . '%')->first();
+            if ($match) {
+                return $match;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Build the preferred inventory item names based on the linked harvest
+     * and the latest completed post-harvest output.
+     */
+    private function preferredInventoryNames(): array
+    {
+        if (!$this->harvest_id) {
+            return [];
+        }
+
+        $harvest = $this->relationLoaded('harvest')
+            ? $this->harvest
+            : Harvest::with('planting.riceVariety')->find($this->harvest_id);
+
+        if (!$harvest) {
+            return [];
+        }
+
+        $varietyName = $harvest->planting?->riceVariety?->name
+            ?? $harvest->planting?->crop_type
+            ?? $this->riceVariety?->name;
+
+        if (!$varietyName) {
+            return [];
+        }
+
+        $gradeSuffix = $harvest->quality_grade
+            ? ' (Grade ' . $harvest->quality_grade . ')'
+            : '';
+
+        $candidates = [];
+        $latestProcess = $harvest->getLatestProcess();
+
+        if ($latestProcess) {
+            $processSuffix = match ($latestProcess->process_type) {
+                PostHarvestProcess::TYPE_THRESHING => ' - Threshed',
+                PostHarvestProcess::TYPE_DRYING => ' - Dried',
+                PostHarvestProcess::TYPE_MILLING => ' - Milled',
+                default => null,
+            };
+
+            if ($processSuffix) {
+                $candidates[] = $varietyName . $processSuffix . $gradeSuffix;
+            }
+        }
+
+        if ($this->processing_method === self::PROCESSING_MILLED) {
+            $candidates[] = $varietyName . ' - Milled' . $gradeSuffix;
+        }
+
+        $candidates[] = $varietyName . $gradeSuffix;
+
+        return array_values(array_unique(array_filter($candidates)));
+    }
+
+    /**
      * Get the orders for this product
      */
     public function orders()
@@ -135,7 +305,7 @@ class RiceProduct extends Model
     public function scopeAvailable($query)
     {
         return $query->where('is_available', true)
-                    ->where('quantity_available', '>', 0);
+            ->where('quantity_available', '>', 0);
     }
 
     /**
@@ -151,10 +321,11 @@ class RiceProduct extends Model
      */
     public function scopeAvailableOrPreOrder($query)
     {
-        return $query->where(function ($q) {
-            $q->where('production_status', self::STATUS_AVAILABLE)
-              ->orWhere('production_status', self::STATUS_IN_PRODUCTION);
-        });
+        return $query->where('is_available', true)
+            ->where(function ($q) {
+                $q->where('production_status', self::STATUS_AVAILABLE)
+                    ->orWhere('production_status', self::STATUS_IN_PRODUCTION);
+            });
     }
 
     /**
@@ -245,16 +416,27 @@ class RiceProduct extends Model
      */
     public function reserveQuantity($quantity)
     {
-        if (!$this->hasSufficientQuantity($quantity)) {
-            throw new \Exception('Insufficient quantity available');
-        }
+        // Use a transaction and lockForUpdate to ensure atomicity and prevent race conditions
+        \Illuminate\Support\Facades\DB::transaction(function () use ($quantity) {
+            // Re-fetch the product with a lock
+            $freshProduct = self::where('id', $this->id)->lockForUpdate()->first();
 
-        $this->decrement('quantity_available', $quantity);
-        
-        // Mark as unavailable if no quantity left
-        if ($this->quantity_available <= 0) {
-            $this->update(['is_available' => false]);
-        }
+            if (!$freshProduct->hasSufficientQuantity($quantity)) {
+                throw new \Exception('Insufficient quantity available');
+            }
+
+            // Decrement on the locked instance
+            $freshProduct->decrement('quantity_available', $quantity);
+
+            // Mark as unavailable if no quantity left (using the fresh instance)
+            if ($freshProduct->quantity_available <= 0) {
+                $freshProduct->update(['is_available' => false]);
+            }
+
+            // Sync current instance with fresh data to reflect changes in the calling scope
+            $this->quantity_available = $freshProduct->quantity_available;
+            $this->is_available = $freshProduct->is_available;
+        });
     }
 
     /**
@@ -263,7 +445,7 @@ class RiceProduct extends Model
     public function releaseQuantity($quantity)
     {
         $this->increment('quantity_available', $quantity);
-        
+
         // Mark as available if quantity is restored
         if ($this->quantity_available > 0) {
             $this->update(['is_available' => true]);
@@ -388,10 +570,63 @@ class RiceProduct extends Model
         $dLat = deg2rad($lat2 - $lat1);
         $dLon = deg2rad($lon2 - $lon1);
 
-        $a = sin($dLat/2) * sin($dLat/2) + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon/2) * sin($dLon/2);
-        $c = 2 * atan2(sqrt($a), sqrt(1-$a));
+        $a = sin($dLat / 2) * sin($dLat / 2) + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon / 2) * sin($dLon / 2);
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
 
         return $earthRadius * $c;
     }
 
+    /**
+     * Deduct quantity from linked inventory item
+     * 
+     * @param float $quantity Quantity to deduct
+     * @param int|null $orderId Order ID for transaction reference
+     * @return bool True if deduction was successful
+     */
+    public function deductFromInventory($quantity, $orderId = null)
+    {
+        // Find matching inventory item
+        $inventoryItem = $this->findMatchingInventoryItem();
+
+        if (!$inventoryItem) {
+            \Log::warning('Inventory deduction failed: no matching inventory item found', [
+                'product_id' => $this->id,
+                'product_name' => $this->name,
+                'farmer_id' => $this->farmer_id,
+                'inventory_item_id' => $this->inventory_item_id,
+                'order_id' => $orderId,
+                'quantity' => $quantity,
+            ]);
+            return false;
+        }
+
+        // Lock the inventory item for update to prevent race conditions
+        // We use a fresh query to get the lock
+        $inventoryItem = \App\Models\InventoryItem::where('id', $inventoryItem->id)->lockForUpdate()->first();
+
+        if ($inventoryItem && $inventoryItem->removeStock($quantity)) {
+            // Log transaction
+            \App\Models\InventoryTransaction::create([
+                'inventory_item_id' => $inventoryItem->id,
+                'user_id' => $this->farmer_id,
+                'transaction_type' => 'out',
+                'quantity' => $quantity,
+                'unit_cost' => $inventoryItem->unit_price,
+                'total_cost' => $quantity * ($inventoryItem->unit_price ?? 0),
+                'reference_type' => 'RiceOrder',
+                'reference_id' => $orderId,
+                'notes' => "Sold via Marketplace Product: {$this->name}",
+                'transaction_date' => now(),
+            ]);
+
+            // Auto-link ID if missing for future performance
+            if (!$this->inventory_item_id) {
+                $this->update(['inventory_item_id' => $inventoryItem->id]);
+            }
+
+            return true;
+        }
+
+        return false;
+    }
 }

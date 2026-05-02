@@ -1,22 +1,24 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
-import { riceMarketplaceAPI, riceVarietiesAPI } from '@/services/api';
+import api, { riceMarketplaceAPI, riceVarietiesAPI, cartAPI } from '@/services/api';
 import { useAuthStore } from './auth';
 
 export const useMarketplaceStore = defineStore('marketplace', {
-  state: () => ({
-    products: [],
-    productsPagination: null,
-    categories: [],
-    cart: [],
-    orders: [],
-    ordersPagination: null,
-    sales: [],
-    farmerProducts: [],
-    riceVarieties: [],
-    loading: false,
-    error: null,
-  }),
+  state: () => {
+    return {
+      products: [],
+      productsPagination: null,
+      categories: [],
+      cart: [],
+      orders: [],
+      ordersPagination: null,
+      sales: [],
+      farmerProducts: [],
+      riceVarieties: [],
+      loading: false,
+      error: null,
+    };
+  },
 
   getters: {
     cartItemsCount: (state) => {
@@ -47,9 +49,8 @@ export const useMarketplaceStore = defineStore('marketplace', {
     riceProducts: (state) => {
       try {
         if (!Array.isArray(state.products)) return [];
-        return state.products.filter(product => {
-          return product && product.category === 'Harvested Rice';
-        });
+        // Return all products - rice marketplace products don't use category filtering
+        return state.products;
       } catch (error) {
         console.warn('Error in riceProducts getter:', error);
         return [];
@@ -268,17 +269,26 @@ export const useMarketplaceStore = defineStore('marketplace', {
       this.error = null;
 
       try {
-        const response = await riceMarketplaceAPI.getOrders(filters);
+        const authStore = useAuthStore();
+        const isFarmer = authStore.user?.role === 'farmer';
+
+        // Use role-specific endpoint
+        const endpoint = isFarmer
+          ? '/rice-marketplace/farmer/orders'
+          : '/rice-marketplace/buyer/orders';
+
+        const response = await api.get(endpoint, { params: filters });
         const payload = response.data?.orders;
         const items = payload?.data || payload || [];
 
         this.orders = Array.isArray(items) ? items : [];
-        this.ordersPagination = payload
+        // Only set pagination if the response actually contains pagination data
+        this.ordersPagination = (payload && typeof payload.current_page === 'number')
           ? {
             current_page: payload.current_page,
-            last_page: payload.last_page,
-            per_page: payload.per_page,
-            total: payload.total,
+            last_page: payload.last_page || 1,
+            per_page: payload.per_page || 10,
+            total: payload.total || items.length,
           }
           : null;
 
@@ -292,6 +302,7 @@ export const useMarketplaceStore = defineStore('marketplace', {
         this.loading = false;
       }
     },
+
 
     async fetchSales() {
       this.loading = true;
@@ -308,69 +319,252 @@ export const useMarketplaceStore = defineStore('marketplace', {
     },
 
     // Cart management
-    addToCart(product, quantity = 1) {
-      const existingItem = this.cart.find(item => item.id === product.id);
+    async fetchCart() {
+      this.loading = true;
+      try {
+        const response = await cartAPI.get();
+        // The backend returns { items: [...], total: ..., item_count: ... }
+        // Map backend items to frontend structure if needed, or update components to match backend
+        const items = response.data?.items || [];
 
-      if (existingItem) {
-        existingItem.quantity += quantity;
-      } else {
-        this.cart.push({
-          id: product.id,
-          name: product.name,
-          price: Number(product.price), // Ensure price is a number
-          quantity: quantity,
-          image: product.image,
-          farmer: product.farmer,
+        // Transform backend items to expected frontend format
+        this.cart = items.map(item => ({
+          id: item.id, // Cart item ID
+          product_id: item.rice_product_id,
+          name: item.rice_product?.name,
+          price: Number(item.rice_product?.price_per_unit || 0),
+          unit: item.rice_product?.unit || 'kg',
+          quantity: Number(item.quantity) || 0, // Parse as number
+          image: item.rice_product?.images?.[0] || item.rice_product?.image,
+          farmer: item.rice_product?.farmer,
+          stock: item.rice_product?.quantity_available
+        }));
+
+        return response.data;
+      } catch (error) {
+        console.error('Failed to fetch cart:', error);
+        this.error = error.response?.data?.message || 'Failed to load cart';
+        // Fallback to empty cart on error?
+        // this.cart = [];
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async addToCart(product, quantity = 1) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const response = await cartAPI.add({
+          rice_product_id: product.id,
+          quantity: quantity
         });
+
+        // Refresh cart to get updated state
+        await this.fetchCart();
+
+        return response.data;
+      } catch (error) {
+        console.error('Failed to add to cart:', error);
+        this.error = error.response?.data?.message || 'Failed to add item to cart';
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async removeFromCart(cartItemId) {
+      this.loading = true;
+      try {
+        await cartAPI.remove(cartItemId);
+        // Remove locally 
+        this.cart = this.cart.filter(item => item.id !== cartItemId);
+      } catch (error) {
+        console.error('Failed to remove from cart:', error);
+        this.error = error.response?.data?.message || 'Failed to remove item';
+        // Refetch to be safe
+        await this.fetchCart();
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async updateCartQuantity(cartItemId, quantity) {
+      if (quantity <= 0) {
+        return this.removeFromCart(cartItemId);
       }
 
-      this.saveCartToStorage();
-    },
-
-    removeFromCart(productId) {
-      this.cart = this.cart.filter(item => item.id !== productId);
-      this.saveCartToStorage();
-    },
-
-    updateCartQuantity(productId, quantity) {
-      const item = this.cart.find(item => item.id === productId);
-      if (item) {
-        if (quantity <= 0) {
-          this.removeFromCart(productId);
-        } else {
+      this.loading = true;
+      try {
+        await cartAPI.update(cartItemId, { quantity });
+        // Update locally
+        const item = this.cart.find(item => item.id === cartItemId);
+        if (item) {
           item.quantity = quantity;
         }
-        this.saveCartToStorage();
+      } catch (error) {
+        console.error('Failed to update quantity:', error);
+        this.error = error.response?.data?.message || 'Failed to update quantity';
+        // Refetch to be safe
+        await this.fetchCart();
+        throw error;
+      } finally {
+        this.loading = false;
       }
     },
 
-    clearCart() {
-      this.cart = [];
-      this.saveCartToStorage();
-    },
-
-    saveCartToStorage() {
-      localStorage.setItem('marketplace_cart', JSON.stringify(this.cart));
-    },
-
-    loadCartFromStorage() {
-      const savedCart = localStorage.getItem('marketplace_cart');
-      if (savedCart) {
-        this.cart = JSON.parse(savedCart);
+    async clearCart() {
+      this.loading = true;
+      try {
+        await cartAPI.clear();
+        this.cart = [];
+      } catch (error) {
+        console.error('Failed to clear cart:', error);
+        this.error = error.response?.data?.message || 'Failed to clear cart';
+        throw error;
+      } finally {
+        this.loading = false;
       }
     },
+
+    // saveCartToStorage and loadCartFromStorage are no longer needed for backend-sync cart
 
     async createOrder(orderData) {
       this.loading = true;
       try {
         const response = await riceMarketplaceAPI.createOrder(orderData);
-        // Don't clear cart here, let the component handle it after all orders are created
         return response.data;
       } catch (error) {
         this.error = error.response?.data?.message || 'Failed to create order';
         throw error;
       } finally {
         this.loading = false;
+      }
+    },
+
+    async checkout(checkoutData) {
+      this.loading = true;
+      this.error = null;
+      try {
+        // Use the bulk checkout endpoint
+        const response = await cartAPI.checkout(checkoutData);
+
+        // Cart is cleared on backend, clear it locally
+        this.cart = [];
+
+        return response.data;
+      } catch (error) {
+        this.error = error.response?.data?.message || 'Checkout failed';
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    // Buyer order actions
+    async fetchBuyerOrders() {
+      this.loading = true;
+      try {
+        const response = await axios.get('/api/rice-marketplace/buyer/orders');
+        const payload = response.data?.orders;
+        // Handle paginated response - extract data array
+        const items = payload?.data || payload || [];
+        this.orders = Array.isArray(items) ? items : [];
+        return response.data;
+      } catch (error) {
+        this.error = error.response?.data?.message || 'Failed to fetch orders';
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async confirmOrderDelivery(orderId) {
+      try {
+        const response = await axios.post(`/api/rice-marketplace/orders/${orderId}/deliver`);
+        return response.data;
+      } catch (error) {
+        throw error;
+      }
+    },
+
+    async disputeOrder(orderId, reason) {
+      try {
+        const response = await axios.post(`/api/rice-marketplace/orders/${orderId}/dispute`, { reason });
+        return response.data;
+      } catch (error) {
+        throw error;
+      }
+    },
+
+    // Farmer order actions
+    async fetchFarmerOrders(filters = {}) {
+      this.loading = true;
+      try {
+        const response = await axios.get('/api/rice-marketplace/farmer/orders', { params: filters });
+        const payload = response.data?.orders;
+        // Handle paginated response - extract data array
+        const items = payload?.data || payload || [];
+        this.orders = Array.isArray(items) ? items : [];
+        return response.data;
+      } catch (error) {
+        this.error = error.response?.data?.message || 'Failed to fetch orders';
+        throw error;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async acceptOrder(orderId, options = {}) {
+      try {
+        const response = await axios.post(`/api/rice-marketplace/orders/${orderId}/accept`, {
+          expected_delivery_date: options.expected_delivery_date || null,
+          farmer_notes: options.farmer_notes || null,
+          confirmed_pickup_date: options.confirmed_pickup_date || null
+        });
+        return response.data;
+      } catch (error) {
+        throw error;
+      }
+    },
+
+    async rejectOrder(orderId, reason = null) {
+      try {
+        const response = await axios.post(`/api/rice-marketplace/orders/${orderId}/reject`, { reason });
+        return response.data;
+      } catch (error) {
+        throw error;
+      }
+    },
+
+    async shipOrder(orderId, trackingNumber = null) {
+      try {
+        const response = await axios.post(`/api/rice-marketplace/orders/${orderId}/ship`, {
+          tracking_number: trackingNumber
+        });
+        return response.data;
+      } catch (error) {
+        throw error;
+      }
+    },
+
+    async markAsPaid(orderId) {
+      try {
+        const response = await axios.post(`/api/rice-marketplace/orders/${orderId}/mark-paid`);
+        return response.data;
+      } catch (error) {
+        throw error;
+      }
+    },
+
+    async respondToNegotiation(orderId, action) {
+      try {
+        const response = await axios.post(`/api/rice-marketplace/orders/${orderId}/negotiate`, {
+          action: action // 'accept' or 'reject'
+        });
+        return response.data;
+      } catch (error) {
+        throw error;
       }
     },
   },

@@ -1,24 +1,28 @@
 <template>
-  <div class="min-h-screen bg-gray-50">
-    <header class="bg-white border-b border-gray-200">
-      <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex items-center justify-between">
+  <div class="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 py-10 px-4 sm:px-6 lg:px-8">
+    <div class="w-full mx-auto space-y-8">
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p class="text-sm text-gray-500">Task details</p>
-          <h1 class="text-2xl font-semibold text-gray-900">
+          <button
+            type="button"
+            @click="router.push('/tasks')"
+            class="inline-flex items-center text-sm font-medium text-emerald-700 hover:text-emerald-900 transition-colors"
+          >
+            <svg class="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Tasks
+          </button>
+          <h1 class="mt-4 text-3xl font-bold text-gray-900">
             {{ task ? taskTitle : 'Loading task...' }}
           </h1>
+          <p class="mt-2 text-base text-gray-600 max-w-2xl">
+            Task details
+          </p>
         </div>
-        <router-link
-          to="/tasks"
-          class="text-sm text-gray-600 hover:text-gray-800"
-        >
-          ← Back to tasks
-        </router-link>
       </div>
-    </header>
 
-    <main class="px-4 sm:px-6 lg:px-8 py-8">
-      <div class="max-w-4xl mx-auto space-y-6">
+
         <div
           v-if="loading"
           class="bg-white border border-gray-100 rounded-2xl shadow px-6 py-8 text-center text-gray-500"
@@ -79,6 +83,39 @@
                   {{ task.laborer.contact }}
                 </p>
               </div>
+              </div>
+            
+            <div class="px-6 py-5 border-t border-gray-100">
+                <p class="text-sm text-gray-500 mb-2">Payment Details</p>
+                
+                <div v-if="task.payment_type === 'piece_rate'" class="bg-emerald-50 rounded-lg p-3 border border-emerald-100 inline-block min-w-[200px]">
+                    <div class="flex items-center justify-between gap-4">
+                        <div>
+                            <p class="text-sm font-medium text-emerald-900">Piece Rate</p>
+                            <p class="text-xs text-emerald-700 mt-0.5">
+                                {{ formatNumber(task.quantity) }} {{ task.unit || 'units' }} × {{ formatCurrency(task.unit_price) }}
+                            </p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs text-emerald-600 uppercase font-bold tracking-wider">Total</p>
+                            <p class="text-lg font-bold text-emerald-700">{{ formatCurrency(task.wage_amount) }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-else-if="task.payment_type === 'wage'" class="bg-gray-50 rounded-lg p-3 border border-gray-200 inline-block">
+                    <p class="text-sm font-medium text-gray-900">Standard Wage</p>
+                    <p class="text-lg font-bold text-gray-700 mt-1">{{ formatCurrency(task.wage_amount) }}</p>
+                </div>
+
+                <div v-else-if="task.payment_type === 'share'" class="bg-orange-50 rounded-lg p-3 border border-orange-100 inline-block">
+                     <p class="text-sm font-medium text-orange-900">Revenue Share</p>
+                     <p class="text-lg font-bold text-orange-700 mt-1">{{ task.revenue_share_percentage }}% <span class="text-sm font-normal text-orange-600">of harvest</span></p>
+                </div>
+
+                <div v-else class="text-sm text-gray-500 italic">
+                    No payment structure defined.
+                </div>
             </div>
           </section>
 
@@ -122,9 +159,11 @@
           </section>
         </div>
       </div>
-    </main>
+
   </div>
 </template>
+
+
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
@@ -132,6 +171,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { tasksAPI } from '@/services/api'
 import { useFarmStore } from '@/stores/farm'
 import { getTaskTypeLabel } from '@/utils/taskTypes'
+import { formatCurrency } from '@/utils/format'
+
+const formatNumber = (num) => {
+  return Number(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
 
 const route = useRoute()
 const router = useRouter()
@@ -251,12 +295,24 @@ const fetchTask = async () => {
 
 const updateStatus = async (nextStatus) => {
   if (!task.value) return
+
+  // Warn if completing without a laborer
+  if (nextStatus === 'completed' && !task.value.assigned_to && !task.value.laborer_group_id) {
+    const proceed = confirm(
+      'This task has no assigned laborer. No labor expense will be recorded.\n\nDo you want to continue?'
+    )
+    if (!proceed) return
+  }
+
   actionLoading.value = true
   error.value = null
 
   try {
     const response = await farmStore.updateTask(task.value.id, { status: nextStatus })
     task.value = response?.task || { ...task.value, status: nextStatus }
+    if (response?.warning) {
+      alert(response.warning)
+    }
   } catch (err) {
     error.value = err.userMessage || err.response?.data?.message || 'Failed to update task.'
   } finally {

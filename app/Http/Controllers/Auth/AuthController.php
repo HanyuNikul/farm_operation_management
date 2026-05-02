@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Storage;
 class AuthController extends Controller
 {
     /**
@@ -19,12 +20,12 @@ class AuthController extends Controller
     public function register(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'first_name' => 'required|string|max:255',
-            'middle_initial' => 'nullable|string|max:5',
-            'last_name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users', // Email required again
+            'first_name' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z\s\.\-]+$/', new \App\Rules\NoEmoji],
+            'middle_initial' => ['nullable', 'string', 'max:5', 'regex:/^[a-zA-Z\s\.\-]+$/', new \App\Rules\NoEmoji],
+            'last_name' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z\s\.\-]+$/', new \App\Rules\NoEmoji],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => 'required|string|min:8|confirmed',
-            'phone' => 'required|string|max:20|unique:users',
+            'phone' => ['required', 'string', 'max:20', 'regex:/^(09|\+639)\d{9}$/', 'unique:users', new \App\Rules\NoEmoji],
             'address' => 'nullable|array',
             'verification_method' => ['required', 'string', Rule::in(['sms', 'email'])],
             'role' => ['required', 'string', Rule::in(['farmer', 'buyer'])],
@@ -40,12 +41,7 @@ class AuthController extends Controller
         // --- USE THE ROLE FROM THE REQUEST ---
         $role = $request->role;
 
-        // (Optional) Keep your "one farmer" logic if you want
-        if ($role === 'farmer' && User::where('role', 'farmer')->exists()) {
-            return response()->json([
-                'message' => 'A farmer account already exists.'
-            ], 422);
-        }
+        // (Optional) Removed "one farmer" restriction to allow multiple farmers/sellers
 
         // Generate verification code
         $verificationCode = str_pad(rand(0, 999999), 6, '0', STR_PAD_LEFT);
@@ -60,15 +56,15 @@ class AuthController extends Controller
             'role' => $role,
             'phone' => $request->phone,
             'address' => $request->address,
-            'approval_status' => 'pending',
             'verification_code' => $verificationCode,
+            'verification_code_expires_at' => now()->addMinutes(30),
         ]);
 
         // Send Verification Code
         if ($request->verification_method === 'sms') {
             try {
-                $twilio = new \App\Services\TwilioService();
-                $twilio->sendSMS($user->phone, "Your RiceFARM verification code is: {$verificationCode}");
+                $semaphore = new \App\Services\SemaphoreService();
+                $semaphore->sendSMS($user->phone, "Your RiceFARM verification code is: {$verificationCode}");
             } catch (\Exception $e) {
                 \Log::error('Failed to send verification SMS: ' . $e->getMessage());
             }
@@ -124,6 +120,13 @@ class AuthController extends Controller
             ], 401);
         }
 
+        // Enforce verification
+        if (!$user->hasVerifiedEmail() && !$user->phone_verified_at) {
+            return response()->json([
+                'message' => 'Account not verified. Please verify your email or phone.'
+            ], 403);
+        }
+
         $token = $user->createToken('auth-token')->plainTextToken;
 
         return response()->json([
@@ -163,9 +166,12 @@ class AuthController extends Controller
         $user = $request->user();
 
         $validator = Validator::make($request->all(), [
+            'first_name' => 'sometimes|string|max:255',
+            'last_name' => 'sometimes|string|max:255',
             'name' => 'sometimes|string|max:255',
             'email' => 'sometimes|string|email|max:255|unique:users,email,' . $user->id,
             'phone' => 'nullable|string|max:20',
+            'bio' => 'nullable|string|max:1000',
             'address' => 'nullable|array',
             'address.street' => 'nullable|string',
             'address.city' => 'nullable|string',
@@ -181,7 +187,17 @@ class AuthController extends Controller
             ], 422);
         }
 
-        $user->update($request->only(['name', 'email', 'phone', 'address']));
+        // Get the fields to update
+        $updateData = $request->only(['first_name', 'last_name', 'email', 'phone', 'bio', 'address']);
+
+        // Also update the 'name' field for backward compatibility
+        if ($request->has('first_name') || $request->has('last_name')) {
+            $firstName = $request->input('first_name', $user->first_name);
+            $lastName = $request->input('last_name', $user->last_name);
+            $updateData['name'] = trim($firstName . ' ' . $lastName);
+        }
+
+        $user->update($updateData);
 
         return response()->json([
             'message' => 'Profile updated successfully',
@@ -220,6 +236,73 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Password changed successfully'
+        ]);
+    }
+
+    /**
+     * Upload profile picture
+     */
+    public function uploadProfilePicture(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'profile_picture' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $user = $request->user();
+
+        // Delete old profile picture if exists
+        if ($user->profile_picture) {
+            Storage::disk('public')->delete($user->profile_picture);
+        }
+
+        // Store new profile picture
+        $file = $request->file('profile_picture');
+        $filename = 'profile_' . $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
+        $path = $file->storeAs('profile-pictures', $filename, 'public');
+
+        $user->update([
+            'profile_picture' => $path
+        ]);
+
+        return response()->json([
+            'message' => 'Profile picture uploaded successfully',
+            'profile_picture_url' => asset('storage/' . $path),
+            'user' => $user
+        ]);
+    }
+
+    /**
+     * Delete profile picture
+     */
+    public function deleteProfilePicture(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user->profile_picture) {
+            return response()->json([
+                'message' => 'No profile picture to delete'
+            ], 400);
+        }
+
+        // Delete file from storage
+        if ($user->profile_picture) {
+            Storage::disk('public')->delete($user->profile_picture);
+        }
+
+        $user->update([
+            'profile_picture' => null
+        ]);
+
+        return response()->json([
+            'message' => 'Profile picture deleted successfully',
+            'user' => $user
         ]);
     }
 }

@@ -19,25 +19,25 @@ class InventoryItemController extends Controller
     {
         try {
             $user = $request->user();
-            
+
             if (!$user) {
                 return response()->json(['message' => 'Unauthenticated'], 401);
             }
-            
+
             $query = InventoryItem::where('user_id', $user->id);
-            
+
             // Apply filters
             if ($request->has('category') && $request->category) {
                 $query->where('category', $request->category);
             }
-            
+
             // Fix: Ensure we use the correct database columns for comparison
             if ($request->has('low_stock')) {
                 $query->whereRaw('COALESCE(current_stock, 0) <= COALESCE(minimum_stock, 0)');
             }
-            
+
             $inventoryItems = $query->orderBy('name')->get();
-            
+
             return response()->json([
                 'inventory_items' => $inventoryItems
             ]);
@@ -45,7 +45,7 @@ class InventoryItemController extends Controller
             Log::error('Inventory index error: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             return response()->json([
                 'message' => 'Failed to fetch inventory items',
                 'error' => config('app.debug') ? $e->getMessage() : 'An error occurred'
@@ -98,6 +98,8 @@ class InventoryItemController extends Controller
                 'lbs', 'pounds' => 'pounds',
                 'bag', 'bags', 'packet', 'packets' => 'packets',
                 'liter', 'liters' => 'liters',
+                'sack', 'sacks' => 'sacks',
+                'ton', 'tons' => 'tons',
                 default => $unit,
             };
 
@@ -120,6 +122,42 @@ class InventoryItemController extends Controller
                 'user_id' => $request->user()->id,
             ]);
 
+            // Handle initial stock transaction and expense
+            if ($currentStock > 0) {
+                $unitCost = $request->unit_price ?? 0;
+                $totalCost = $currentStock * $unitCost;
+
+                // Log transaction
+                InventoryTransaction::create([
+                    'inventory_item_id' => $inventoryItem->id,
+                    'user_id' => $request->user()->id,
+                    'transaction_type' => 'in',
+                    'quantity' => $currentStock,
+                    'unit_cost' => $unitCost,
+                    'total_cost' => $totalCost,
+                    'reference_type' => 'Initial Stock',
+                    'notes' => 'Initial stock on item creation',
+                    'transaction_date' => now(),
+                ]);
+
+                // Create expense record if cost > 0
+                if ($totalCost > 0) {
+                    $expenseCategory = $this->mapInventoryCategoryToExpenseCategory($category);
+
+                    \App\Models\Expense::create([
+                        'description' => "Initial Stock: {$inventoryItem->name} ({$currentStock} {$inventoryItem->unit})",
+                        'amount' => $totalCost,
+                        'category' => $expenseCategory,
+                        'date' => now(),
+                        'user_id' => $request->user()->id,
+                        'payment_method' => 'cash', // Default to cash for now
+                        'notes' => "Auto-generated from inventory item creation",
+                        'related_entity_type' => \App\Models\Expense::ENTITY_TYPE_INVENTORY_ITEM,
+                        'related_entity_id' => $inventoryItem->id,
+                    ]);
+                }
+            }
+
             return response()->json([
                 'message' => 'Inventory item created successfully',
                 'inventory_item' => $inventoryItem
@@ -140,29 +178,26 @@ class InventoryItemController extends Controller
     /**
      * Display the specified inventory item
      */
-    public function show(Request $request, InventoryItem $inventoryItem): JsonResponse
+    public function show(Request $request, InventoryItem $item): JsonResponse
     {
         $user = $request->user();
-        
-        if ($inventoryItem->user_id !== $user->id) {
+
+        if ($item->user_id != $user->id) {
             return response()->json([
                 'message' => 'Unauthorized access'
             ], 403);
         }
 
         return response()->json([
-            'inventory_item' => $inventoryItem
+            'inventory_item' => $item
         ]);
     }
 
-    /**
-     * Update the specified inventory item
-     */
-    public function update(Request $request, InventoryItem $inventoryItem): JsonResponse
+    public function update(Request $request, InventoryItem $item): JsonResponse
     {
         $user = $request->user();
-        
-        if ($inventoryItem->user_id !== $user->id) {
+
+        if ($item->user_id != $user->id) {
             return response()->json([
                 'message' => 'Unauthorized access'
             ], 403);
@@ -192,7 +227,7 @@ class InventoryItemController extends Controller
         }
 
         // Prepare data for update
-        $data = $request->except(['quantity', 'min_stock']); // Remove legacy keys initially
+        $data = $request->except(['quantity', 'min_stock', 'user_id']); // Remove legacy keys and protect user_id
 
         // Map legacy keys to DB columns if they exist
         if ($request->has('quantity')) {
@@ -212,28 +247,28 @@ class InventoryItemController extends Controller
             };
         }
 
-        $inventoryItem->update($data);
+        $item->update($data);
 
         return response()->json([
             'message' => 'Inventory item updated successfully',
-            'inventory_item' => $inventoryItem
+            'inventory_item' => $item
         ]);
     }
 
     /**
      * Remove the specified inventory item
      */
-    public function destroy(Request $request, InventoryItem $inventoryItem): JsonResponse
+    public function destroy(Request $request, InventoryItem $item): JsonResponse
     {
         $user = $request->user();
-        
-        if ($inventoryItem->user_id !== $user->id) {
+
+        if ($item->user_id != $user->id) {
             return response()->json([
                 'message' => 'Unauthorized access'
             ], 403);
         }
 
-        $inventoryItem->delete();
+        $item->delete();
 
         return response()->json([
             'message' => 'Inventory item deleted successfully'
@@ -246,7 +281,7 @@ class InventoryItemController extends Controller
     public function updateStock(Request $request, InventoryItem $inventoryItem): JsonResponse
     {
         $user = $request->user();
-        
+
         if ($inventoryItem->user_id !== $user->id) {
             return response()->json([
                 'message' => 'Unauthorized access'
@@ -267,7 +302,7 @@ class InventoryItemController extends Controller
         }
 
         $quantity = $request->quantity;
-        
+
         switch ($request->operation) {
             case 'add':
                 $inventoryItem->current_stock += $quantity;
@@ -278,12 +313,23 @@ class InventoryItemController extends Controller
                     $inventoryItem->current_stock = 0;
                 }
                 break;
-            case 'set':
-                $inventoryItem->current_stock = $quantity;
                 break;
         }
 
         $inventoryItem->save();
+
+        // Log transaction
+        \App\Models\InventoryTransaction::create([
+            'inventory_item_id' => $inventoryItem->id,
+            'user_id' => $user->id,
+            'transaction_type' => $request->operation == 'add' ? 'in' : ($request->operation == 'subtract' ? 'out' : 'adjustment'),
+            'quantity' => $quantity,
+            'unit_cost' => $inventoryItem->unit_price ?? 0,
+            'total_cost' => $quantity * ($inventoryItem->unit_price ?? 0),
+            'reference_type' => 'Manual',
+            'notes' => 'Stock ' . $request->operation . ' via API',
+            'transaction_date' => now(),
+        ]);
 
         return response()->json([
             'message' => 'Stock updated successfully',
@@ -297,37 +343,118 @@ class InventoryItemController extends Controller
     public function addStock(Request $request, InventoryItem $item): JsonResponse
     {
         $user = $request->user();
-        if ($item->user_id !== $user->id) {
+        if ($item->user_id != $user->id) {
             return response()->json(['message' => 'Unauthorized access'], 403);
         }
-        
+
         $validator = Validator::make($request->all(), [
-            'quantity' => 'required|numeric|min:0.01'
+            'quantity' => 'required|numeric|min:0.01',
+            'unit_cost' => 'nullable|numeric|min:0',
+            'create_expense' => 'nullable|boolean',
+            'notes' => 'nullable|string|max:500',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
         }
 
-        $item->current_stock = ($item->current_stock ?? 0) + (float)$request->quantity;
+        $quantity = (float) $request->quantity;
+        $unitCost = $request->input('unit_cost', $item->unit_price ?? 0);
+        $createExpense = $request->input('create_expense', true);
+        $notes = $request->input('notes', 'Manual stock addition via API');
+
+        // Calculate Weighted Average Cost (WAC)
+        $currentStock = $item->current_stock ?? 0;
+        $currentUnitPrice = $item->unit_price ?? 0;
+
+        // Calculate total value before adding new stock
+        $currentTotalValue = $currentStock * $currentUnitPrice;
+
+        // Calculate new stock value
+        $addedValue = $quantity * $unitCost;
+
+        // Calculate new total stock
+        $newTotalStock = $currentStock + $quantity;
+
+        if ($newTotalStock > 0) {
+            // Calculate new unit price
+            $newUnitPrice = ($currentTotalValue + $addedValue) / $newTotalStock;
+            $item->unit_price = $newUnitPrice;
+        }
+
+        $item->current_stock = $newTotalStock;
         $item->save();
+
+        $totalCost = $quantity * $unitCost;
+
+        // Log transaction
+        \App\Models\InventoryTransaction::create([
+            'inventory_item_id' => $item->id,
+            'user_id' => $user->id,
+            'transaction_type' => 'in',
+            'quantity' => $quantity,
+            'unit_cost' => $unitCost,
+            'total_cost' => $totalCost,
+            'reference_type' => 'Restock',
+            'notes' => $notes,
+            'transaction_date' => now(),
+        ]);
+
+        $expense = null;
+
+        // Create expense record if requested and cost > 0
+        if ($createExpense && $totalCost > 0) {
+            $expenseCategory = $this->mapInventoryCategoryToExpenseCategory($item->category);
+
+            $expense = \App\Models\Expense::create([
+                'description' => "Restock: {$item->name} ({$quantity} {$item->unit})",
+                'amount' => $totalCost,
+                'category' => $expenseCategory,
+                'date' => now(),
+                'user_id' => $user->id,
+                'payment_method' => 'cash',
+                'notes' => "Auto-generated from inventory restock. {$notes}",
+                'related_entity_type' => \App\Models\Expense::ENTITY_TYPE_INVENTORY_ITEM,
+                'related_entity_id' => $item->id,
+            ]);
+        }
 
         return response()->json([
             'message' => 'Stock added successfully',
-            'inventory_item' => $item
+            'inventory_item' => $item,
+            'expense' => $expense,
         ]);
     }
 
+    /**
+     * Map inventory category to expense category
+     */
+    private function mapInventoryCategoryToExpenseCategory(?string $inventoryCategory): string
+    {
+        $mapping = [
+            InventoryItem::CATEGORY_SEEDS => \App\Models\Expense::CATEGORY_SEEDS,
+            InventoryItem::CATEGORY_FERTILIZER => \App\Models\Expense::CATEGORY_FERTILIZER,
+            InventoryItem::CATEGORY_PESTICIDE => \App\Models\Expense::CATEGORY_PESTICIDE,
+            InventoryItem::CATEGORY_EQUIPMENT => \App\Models\Expense::CATEGORY_EQUIPMENT,
+            InventoryItem::CATEGORY_PRODUCE => \App\Models\Expense::CATEGORY_OTHER, // Mapped to safe category
+            // String fallbacks for categories that may exist in database but not as constants
+            'feed' => \App\Models\Expense::CATEGORY_OTHER,
+            'fuel' => \App\Models\Expense::CATEGORY_UTILITIES,
+            'other' => \App\Models\Expense::CATEGORY_OTHER,
+        ];
+
+        return $mapping[$inventoryCategory] ?? \App\Models\Expense::CATEGORY_OTHER;
+    }
     /**
      * Remove stock (POST /inventory/{item}/remove-stock)
      */
     public function removeStock(Request $request, InventoryItem $item): JsonResponse
     {
         $user = $request->user();
-        if ($item->user_id !== $user->id) {
+        if ($item->user_id != $user->id) {
             return response()->json(['message' => 'Unauthorized access'], 403);
         }
-        
+
         $validator = Validator::make($request->all(), [
             'quantity' => 'required|numeric|min:0.01'
         ]);
@@ -336,7 +463,7 @@ class InventoryItemController extends Controller
             return response()->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
         }
 
-        $item->current_stock = max(0, ($item->current_stock ?? 0) - (float)$request->quantity);
+        $item->current_stock = max(0, ($item->current_stock ?? 0) - (float) $request->quantity);
         $item->save();
 
         return response()->json([
@@ -351,14 +478,18 @@ class InventoryItemController extends Controller
     public function lowStock(Request $request): JsonResponse
     {
         $user = $request->user();
-        
+
         $query = InventoryItem::where('user_id', $user->id);
-        
-        // Corrected to use current_stock
-        $lowStockItems = $query->whereRaw('current_stock <= minimum_stock')
+
+        // Exclude produce items — these are harvested/post-harvest outputs,
+        // not restockable supplies. Only warn about seeds, fertilizer,
+        // pesticide, and equipment running low.
+        $lowStockItems = $query
+            ->whereNotIn('category', [InventoryItem::CATEGORY_PRODUCE])
+            ->whereRaw('current_stock <= minimum_stock')
             ->orderBy('name')
             ->get();
-        
+
         return response()->json([
             'low_stock_items' => $lowStockItems
         ]);
@@ -378,8 +509,8 @@ class InventoryItemController extends Controller
     public function getTransactions(Request $request, InventoryItem $item): JsonResponse
     {
         $user = $request->user();
-        
-        if ($item->user_id !== $user->id) {
+
+        if ($item->user_id != $user->id) {
             return response()->json(['message' => 'Unauthorized access'], 403);
         }
 

@@ -1,5 +1,5 @@
 <template>
-  <div class="p-6 max-w-7xl mx-auto">
+  <div class="p-6 w-full mx-auto">
     <!-- Header -->
     <div class="mb-8">
       <h1 class="text-3xl font-bold text-gray-900">Rice Farming Dashboard</h1>
@@ -78,6 +78,28 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Failed Plantings Warning Banner -->
+    <div
+      v-if="stats.failed_plantings_count > 0"
+      class="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-4"
+    >
+      <div class="shrink-0 text-2xl">💀</div>
+      <div class="flex-1">
+        <p class="text-sm font-semibold text-red-800">
+          {{ stats.failed_plantings_count }} planting{{ stats.failed_plantings_count > 1 ? 's' : '' }} failed this season.
+        </p>
+        <p class="text-xs text-red-600 mt-0.5">
+          Review causes and check your financial reports for the recorded crop loss entries.
+        </p>
+      </div>
+      <router-link
+        to="/plantings"
+        class="shrink-0 inline-flex items-center px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700"
+      >
+        View Failed
+      </router-link>
     </div>
 
     <!-- Module Summary Cards -->
@@ -472,7 +494,7 @@
               </div>
               <div class="flex justify-between">
                 <span class="text-sm text-gray-600">Avg Suitability</span>
-                <span class="text-sm font-medium text-blue-600">{{ Math.floor(Math.random() * 20 + 70) }}%</span>
+                <span class="text-sm font-medium text-blue-600">—</span>
               </div>
             </div>
             <div class="mt-4">
@@ -498,7 +520,7 @@
             <div class="space-y-3">
               <div class="flex justify-between">
                 <span class="text-sm text-gray-600">Total Items</span>
-                <span class="text-sm font-medium text-gray-900">{{ Math.floor(Math.random() * 50 + 20) }}</span>
+                <span class="text-sm font-medium text-gray-900">{{ stats.total_items || 0 }}</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-sm text-gray-600">Low Stock</span>
@@ -532,7 +554,7 @@
             <div class="space-y-3">
               <div class="flex justify-between">
                 <span class="text-sm text-gray-600">Listed Products</span>
-                <span class="text-sm font-medium text-gray-900">{{ Math.floor(Math.random() * 10 + 5) }}</span>
+                <span class="text-sm font-medium text-gray-900">—</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-sm text-gray-600">Pending Orders</span>
@@ -540,7 +562,7 @@
               </div>
               <div class="flex justify-between">
                 <span class="text-sm text-gray-600">This Month Sales</span>
-                <span class="text-sm font-medium text-green-600">{{ formatCurrency(Math.floor(Math.random() * 5000 + 1000)) }}</span>
+                <span class="text-sm font-medium text-green-600">—</span>
               </div>
             </div>
             <div class="mt-4">
@@ -711,7 +733,7 @@ const loadDashboardData = async () => {
 
     // Process inventory data
     const inventoryData = inventoryResponse.data.inventory || [];
-    const lowStockItems = inventoryData.filter(item => item.quantity <= (item.min_stock || 10));
+    const lowStockItems = inventoryData.filter(item => (item.current_stock ?? item.quantity ?? 0) <= (item.minimum_stock ?? item.min_stock ?? 10));
 
     // Process marketplace data
     const ordersData = marketplaceResponse.data.orders || [];
@@ -730,8 +752,10 @@ const loadDashboardData = async () => {
     stats.value = {
       total_fields: fieldsData.length,
       active_plantings: lifecycleData.total_plantings || 0,
+      failed_plantings_count: lifecycleData.failed_plantings || 0,
       critical_plantings: lifecycleData.critical_plantings?.length || 0,
       weather_alerts: weatherFieldData.reduce((total, field) => total + (field.alerts_count || 0), 0),
+      total_items: inventoryData.length,
       low_stock_items: lowStockItems.length,
       pending_orders: pendingOrders.length,
       monthly_expenses: thisMonthExpenses.reduce((total, expense) => total + parseFloat(expense.amount || 0), 0),

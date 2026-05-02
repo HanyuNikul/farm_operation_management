@@ -26,7 +26,7 @@ class LaborWage extends Model
     /**
      * Get the laborer that owns the wage record
      */
-    public function laborer()
+    public function laborer(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(Laborer::class);
     }
@@ -34,18 +34,18 @@ class LaborWage extends Model
     /**
      * Get the task associated with this wage
      */
-    public function task()
+    public function task(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(Task::class);
     }
 
     /**
-     * Calculate wage amount based on hours and hourly rate
+     * Calculate wage amount based on hours and rate
      */
     public function calculateWageAmount()
     {
         if ($this->laborer && $this->hours_worked) {
-            $this->wage_amount = $this->hours_worked * $this->laborer->hourly_rate;
+            $this->wage_amount = $this->hours_worked * ($this->laborer->rate ?? 0);
             $this->save();
         }
     }
@@ -59,7 +59,7 @@ class LaborWage extends Model
 
         static::creating(function ($laborWage) {
             if (!$laborWage->wage_amount && $laborWage->laborer) {
-                $laborWage->wage_amount = $laborWage->hours_worked * $laborWage->laborer->hourly_rate;
+                $laborWage->wage_amount = $laborWage->hours_worked * ($laborWage->laborer->rate ?? 0);
             }
         });
     }

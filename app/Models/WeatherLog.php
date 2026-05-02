@@ -8,10 +8,11 @@ class WeatherLog extends Model
 {
 
     protected $fillable = [
-        'field_id',
+        'farm_id',
         'temperature',
         'humidity',
         'wind_speed',
+        'rainfall',
         'conditions',
         'recorded_at',
     ];
@@ -20,6 +21,7 @@ class WeatherLog extends Model
         'temperature' => 'decimal:1',
         'humidity' => 'decimal:1',
         'wind_speed' => 'decimal:1',
+        'rainfall' => 'decimal:2',
         'recorded_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
@@ -36,11 +38,11 @@ class WeatherLog extends Model
     const CONDITION_FOGGY = 'foggy';
 
     /**
-     * Get the field that owns the weather log
+     * Get the farm that owns the weather log
      */
-    public function field()
+    public function farm(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
-        return $this->belongsTo(Field::class);
+        return $this->belongsTo(Farm::class);
     }
 
     /**
@@ -48,7 +50,7 @@ class WeatherLog extends Model
      */
     public function getTemperatureFAttribute()
     {
-        return ($this->temperature * 9/5) + 32;
+        return ($this->temperature * 9 / 5) + 32;
     }
 
     /**
@@ -56,11 +58,11 @@ class WeatherLog extends Model
      */
     public function isFavorableForFarming(): bool
     {
-        return $this->temperature >= 10 && 
-               $this->temperature <= 35 &&
-               $this->humidity >= 30 &&
-               $this->humidity <= 80 &&
-               $this->wind_speed < 20;
+        return $this->temperature >= 10 &&
+            $this->temperature <= 35 &&
+            $this->humidity >= 30 &&
+            $this->humidity <= 80 &&
+            $this->wind_speed < 20;
     }
 
     /**
@@ -68,7 +70,7 @@ class WeatherLog extends Model
      */
     public function getWeatherIconAttribute()
     {
-        return match($this->conditions) {
+        return match ($this->conditions) {
             self::CONDITION_CLEAR => 'sun',
             self::CONDITION_CLOUDY => 'cloud',
             self::CONDITION_RAINY => 'cloud-rain',

@@ -1,28 +1,26 @@
 <template>
   <div class="flex h-screen bg-gray-100 overflow-hidden">
     <!-- Sidebar -->
-    <div 
+    <div
       class="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-2xl transform transition-transform duration-300 ease-in-out lg:translate-x-0 flex flex-col h-full border-r border-gray-100"
       :class="{ '-translate-x-full': !sidebarOpen, 'translate-x-0': sidebarOpen }"
     >
       <!-- Sidebar Header -->
-      <div class="flex items-center justify-between h-16 px-6 bg-gradient-to-r from-green-600 to-emerald-600 shadow-lg flex-shrink-0">
+      <div class="flex items-center justify-between h-16 px-6 bg-white border-b border-gray-200 flex-shrink-0">
         <div class="flex items-center">
           <div class="flex-shrink-0">
-            <div class="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-md transform transition-transform hover:scale-110">
-              <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
-              </svg>
+            <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-md ring-1 ring-gray-200 transform transition-transform hover:scale-110">
+              <img src="@assets/logo.png" alt="Logo" class="w-8 h-8" />
             </div>
           </div>
           <div class="ml-3">
-            <h1 class="text-white text-lg font-bold tracking-tight">RiceFARM</h1>
-            <p class="text-green-50 text-xs font-medium">Management System</p>
+            <h1 class="text-gray-900 text-lg font-bold tracking-tight">ANIBUKID</h1>
+            <p class="text-gray-500 text-xs font-medium">Management System</p>
           </div>
         </div>
         <button
           @click="toggleSidebar"
-          class="lg:hidden text-white hover:text-green-100 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-green-600 rounded-lg p-1 transition-all"
+          class="lg:hidden text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 rounded-lg p-1 transition-all"
         >
           <XMarkIcon class="w-6 h-6" />
         </button>
@@ -59,8 +57,10 @@
           </router-link>
 
           <!-- Farmer Section -->
-          <template v-if="authStore.user?.role === 'farmer'">
-            <!-- Core Farm Management -->
+          <template v-if="authStore.isFarmer">
+            <!-- Production Cycle -->
+            <div class="nav-section-title">Production Cycle</div>
+
             <router-link
               to="/fields"
               class="nav-item"
@@ -68,6 +68,15 @@
             >
               <GlobeAltIcon class="nav-icon" />
               Rice Fields
+            </router-link>
+
+            <router-link
+              to="/seed-plantings"
+              class="nav-item"
+              :class="{ 'nav-item-active': $route.path.startsWith('/seed-plantings') }"
+            >
+              <BeakerIcon class="nav-icon" />
+              Seedbed
             </router-link>
 
             <router-link
@@ -80,15 +89,6 @@
             </router-link>
 
             <router-link
-              to="/harvests"
-              class="nav-item"
-              :class="{ 'nav-item-active': $route.path.startsWith('/harvests') }"
-            >
-              <ArchiveBoxIcon class="nav-icon" />
-              Harvests
-            </router-link>
-
-            <router-link
               to="/tasks"
               class="nav-item"
               :class="{ 'nav-item-active': $route.path.startsWith('/tasks') }"
@@ -96,6 +96,36 @@
               <ClipboardDocumentListIcon class="nav-icon" />
               Tasks
             </router-link>
+
+            <router-link
+              to="/pest-tracker"
+              class="nav-item"
+              :class="{ 'nav-item-active': $route.path.startsWith('/pest-tracker') }"
+            >
+              <BugAntIcon class="nav-icon" />
+              Pest Tracker
+            </router-link>
+
+            <router-link
+              to="/harvests"
+              class="nav-item"
+              :class="{ 'nav-item-active': $route.path.startsWith('/harvests') && !$route.path.includes('/processing') && $route.query.focus !== 'processing' }"
+            >
+              <ArchiveBoxIcon class="nav-icon" />
+              Harvests
+            </router-link>
+
+            <router-link
+              :to="{ path: '/harvests', query: { focus: 'processing' } }"
+              class="nav-item"
+              :class="{ 'nav-item-active': $route.path.includes('/processing') || $route.query.focus === 'processing' }"
+            >
+              <BeakerIcon class="nav-icon" />
+              Post-Harvest
+            </router-link>
+
+            <!-- Resources -->
+            <div class="nav-section-title">Resources</div>
 
             <router-link
               to="/inventory"
@@ -106,28 +136,18 @@
               Inventory
             </router-link>
 
-            <div class="nav-section-title">Analytics</div>
-            
             <router-link
-              to="/weather"
+              to="/laborers"
               class="nav-item"
-              :class="{ 'nav-item-active': $route.path.startsWith('/weather') }"
+              :class="{ 'nav-item-active': $route.path.startsWith('/laborers') }"
             >
-              <CloudIcon class="nav-icon" />
-              Weather
+              <UserGroupIcon class="nav-icon" />
+              Laborers
             </router-link>
 
-            <router-link
-              to="/reports"
-              class="nav-item"
-              :class="{ 'nav-item-active': $route.path.startsWith('/reports') }"
-            >
-              <DocumentChartBarIcon class="nav-icon" />
-              Reports
-            </router-link>
-
+            <!-- Business -->
             <div class="nav-section-title">Business</div>
-            
+
             <router-link
               to="/marketplace/my-products"
               class="nav-item"
@@ -147,6 +167,15 @@
             </router-link>
 
             <router-link
+              to="/sales"
+              class="nav-item"
+              :class="{ 'nav-item-active': $route.path.startsWith('/sales') }"
+            >
+              <BanknotesIcon class="nav-icon" />
+              Sales
+            </router-link>
+
+            <router-link
               to="/financial/expenses"
               class="nav-item"
               :class="{ 'nav-item-active': $route.path.startsWith('/financial/expenses') }"
@@ -154,12 +183,42 @@
               <CurrencyDollarIcon class="nav-icon" />
               Expenses
             </router-link>
+
+            <!-- Insights -->
+            <div class="nav-section-title">Insights</div>
+
+            <router-link
+              to="/analytics"
+              class="nav-item"
+              :class="{ 'nav-item-active': $route.path === '/analytics' }"
+            >
+              <ChartBarSquareIcon class="nav-icon" />
+              Data Analytics
+            </router-link>
+
+            <router-link
+              to="/reports"
+              class="nav-item"
+              :class="{ 'nav-item-active': $route.path.startsWith('/reports') }"
+            >
+              <DocumentChartBarIcon class="nav-icon" />
+              Reports
+            </router-link>
+
+            <router-link
+              to="/weather"
+              class="nav-item"
+              :class="{ 'nav-item-active': $route.path.startsWith('/weather') }"
+            >
+              <CloudIcon class="nav-icon" />
+              Weather
+            </router-link>
           </template>
 
           <!-- Marketplace Buyer Section -->
-          <template v-if="authStore.user?.role === 'buyer'">
+          <template v-if="authStore.isBuyer">
             <div class="nav-section-title">Marketplace</div>
-            
+
             <router-link
               to="/marketplace"
               class="nav-item"
@@ -170,27 +229,27 @@
             </router-link>
 
             <router-link
-              to="/marketplace/cart"
+              to="/cart"
               class="nav-item"
-              :class="{ 'nav-item-active': $route.path.startsWith('/marketplace/cart') }"
+              :class="{ 'nav-item-active': $route.path === '/cart' }"
             >
               <ShoppingBagIcon class="nav-icon" />
               Shopping Cart
             </router-link>
 
             <router-link
-              to="/marketplace/orders"
+              to="/buyer/orders"
               class="nav-item"
-              :class="{ 'nav-item-active': $route.path.startsWith('/marketplace/orders') }"
+              :class="{ 'nav-item-active': $route.path.startsWith('/buyer/orders') }"
             >
               <DocumentTextIcon class="nav-icon" />
               My Orders
             </router-link>
 
             <router-link
-              to="/marketplace/favorites"
+              to="/favorites"
               class="nav-item"
-              :class="{ 'nav-item-active': $route.path.startsWith('/marketplace/favorites') }"
+              :class="{ 'nav-item-active': $route.path === '/favorites' }"
             >
               <HeartIcon class="nav-icon" />
               Favorites
@@ -241,7 +300,7 @@
           >
             <Bars3Icon class="w-6 h-6" />
           </button>
-          <h1 class="text-lg font-bold text-gray-900 gradient-text">RiceFARM</h1>
+          <h1 class="text-lg font-bold text-gray-900 gradient-text">ANIBUKID</h1>
           <div class="w-6"></div> <!-- Spacer -->
         </div>
       </div>
@@ -283,6 +342,9 @@ import {
   UserIcon,
   XMarkIcon,
   Bars3Icon,
+  BeakerIcon,
+  BugAntIcon,
+  ChartBarSquareIcon,
 } from '@heroicons/vue/24/outline';
 
 const router = useRouter();
@@ -301,7 +363,7 @@ const closeSidebar = () => {
 
 const safeNavigate = async (path) => {
   if (isNavigating.value) return; // Prevent double-clicks
-  
+
   isNavigating.value = true;
   try {
     await router.push(path);
@@ -319,11 +381,10 @@ const safeNavigate = async (path) => {
 
 const logout = async () => {
   if (isNavigating.value) return; // Prevent double-clicks
-  
+
   isNavigating.value = true;
   try {
     await authStore.logout();
-    console.log('✓ Logout successful');
     router.push('/login');
   } catch (error) {
     console.error('Logout error:', error);
@@ -430,7 +491,7 @@ const logout = async () => {
   .sidebar-container {
     transform: translateX(-100%);
   }
-  
+
   .sidebar-container.open {
     transform: translateX(0);
   }

@@ -19,13 +19,24 @@ class HarvestController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        
+
         $query = Harvest::whereHas('planting.field', function ($q) use ($user) {
             $q->where('user_id', $user->id);
         });
-        
-        $harvests = $query->with(['planting.field', 'planting.riceVariety'])->get();
-        
+
+        // Apply date range filters
+        if ($request->has('date_from')) {
+            $query->whereDate('harvest_date', '>=', $request->date_from);
+        }
+
+        if ($request->has('date_to')) {
+            $query->whereDate('harvest_date', '<=', $request->date_to);
+        }
+
+        $harvests = $query->with(['planting.field', 'planting.riceVariety', 'postHarvestProcesses'])
+            ->orderBy('harvest_date', 'desc')
+            ->get();
+
         return response()->json([
             'harvests' => $harvests
         ]);
@@ -40,11 +51,12 @@ class HarvestController extends Controller
             'planting_id' => 'required|exists:plantings,id',
             'harvest_date' => 'required|date',
             'quantity' => 'required|numeric|min:0',
-            'unit' => 'required|string|in:kg,grams,pounds,bushels,tons',
-            'quality_grade' => 'nullable|string|in:A,B,C,D',
+            'unit' => 'required|string|in:bushels',
             'price_per_unit' => 'nullable|numeric|min:0',
             'total_value' => 'nullable|numeric|min:0',
             'notes' => 'nullable|string',
+            'harvester_share' => 'nullable|numeric|min:0',
+            'harvester_share_percentage' => 'nullable|numeric|min:0|max:100',
         ]);
 
         if ($validator->fails()) {
@@ -57,21 +69,12 @@ class HarvestController extends Controller
         // Check if user owns the planting's field
         $planting = Planting::with(['field', 'riceVariety'])->findOrFail($request->planting_id);
         $user = $request->user();
-        
+
         if ($planting->field->user_id !== $user->id) {
             return response()->json([
                 'message' => 'Unauthorized access to planting'
             ], 403);
         }
-
-        // Map quality_grade to quality enum for backward compatibility
-        $qualityMap = [
-            'A' => 'excellent',
-            'B' => 'good',
-            'C' => 'average',
-            'D' => 'poor',
-        ];
-        $quality = $request->quality_grade ? ($qualityMap[$request->quality_grade] ?? 'average') : 'average';
 
         DB::beginTransaction();
         try {
@@ -81,11 +84,12 @@ class HarvestController extends Controller
                 'quantity' => $request->quantity,
                 'yield' => $request->quantity, // Also set yield for backward compatibility
                 'unit' => $request->unit,
-                'quality' => $quality, // Set quality enum for backward compatibility
-                'quality_grade' => $request->quality_grade,
+                'quality' => 'average', // Default quality for backward compatibility
                 'price_per_unit' => $request->price_per_unit,
                 'total_value' => $request->total_value,
                 'notes' => $request->notes,
+                'harvester_share' => $request->harvester_share,
+                'harvester_share_percentage' => $request->harvester_share_percentage,
             ]);
 
             // Reload harvest with planting relationship for inventory
@@ -93,6 +97,12 @@ class HarvestController extends Controller
 
             // Add to inventory automatically
             $this->addHarvestToInventory($harvest, $user);
+
+            // Update planting status to harvested
+            $planting->update([
+                'status' => Planting::STATUS_HARVESTED,
+                'actual_harvest_date' => $request->harvest_date,
+            ]);
 
             DB::commit();
 
@@ -112,7 +122,7 @@ class HarvestController extends Controller
     public function show(Request $request, Harvest $harvest): JsonResponse
     {
         $user = $request->user();
-        
+
         if ($harvest->planting->field->user_id !== $user->id) {
             return response()->json([
                 'message' => 'Unauthorized access'
@@ -132,7 +142,7 @@ class HarvestController extends Controller
     public function update(Request $request, Harvest $harvest): JsonResponse
     {
         $user = $request->user();
-        
+
         if ($harvest->planting->field->user_id !== $user->id) {
             return response()->json([
                 'message' => 'Unauthorized access'
@@ -142,8 +152,7 @@ class HarvestController extends Controller
         $validator = Validator::make($request->all(), [
             'harvest_date' => 'sometimes|required|date',
             'quantity' => 'sometimes|required|numeric|min:0',
-            'unit' => 'sometimes|required|string|in:kg,grams,pounds,bushels,tons',
-            'quality_grade' => 'nullable|string|in:A,B,C,D',
+            'unit' => 'sometimes|required|string|in:bushels',
             'price_per_unit' => 'nullable|numeric|min:0',
             'total_value' => 'nullable|numeric|min:0',
             'notes' => 'nullable|string',
@@ -157,28 +166,21 @@ class HarvestController extends Controller
         }
 
         $updateData = $request->only([
-            'harvest_date', 'quantity', 'unit', 'quality_grade',
-            'price_per_unit', 'total_value', 'notes'
+            'harvest_date',
+            'quantity',
+            'unit',
+            'price_per_unit',
+            'total_value',
+            'notes',
+            'harvester_share',
+            'harvester_share_percentage',
         ]);
-        
+
         // Map quantity to yield if provided for backward compatibility
         if (isset($updateData['quantity'])) {
             $updateData['yield'] = $updateData['quantity'];
         }
-        
-        // Map quality_grade to quality enum for backward compatibility
-        if (isset($updateData['quality_grade'])) {
-            $qualityMap = [
-                'A' => 'excellent',
-                'B' => 'good',
-                'C' => 'average',
-                'D' => 'poor',
-            ];
-            $updateData['quality'] = $updateData['quality_grade'] 
-                ? ($qualityMap[$updateData['quality_grade']] ?? 'average') 
-                : 'average';
-        }
-        
+
         $harvest->update($updateData);
 
         return response()->json([
@@ -193,7 +195,7 @@ class HarvestController extends Controller
     public function destroy(Request $request, Harvest $harvest): JsonResponse
     {
         $user = $request->user();
-        
+
         if ($harvest->planting->field->user_id !== $user->id) {
             return response()->json([
                 'message' => 'Unauthorized access'
@@ -224,11 +226,6 @@ class HarvestController extends Controller
 
         // Determine the product name from rice variety or crop type
         $productName = $planting->riceVariety?->name ?? $planting->crop_type ?? 'Rice';
-        
-        // If quality grade is provided, append it to the name
-        if ($harvest->quality_grade) {
-            $productName .= ' (Grade ' . $harvest->quality_grade . ')';
-        }
 
         // Find or create inventory item for this product
         $inventoryItem = InventoryItem::firstOrCreate(
@@ -247,13 +244,52 @@ class HarvestController extends Controller
             ]
         );
 
-        // Add the harvested quantity to inventory
-        $inventoryItem->addStock($harvest->quantity);
-        
+        // Add the FULL GROSS quantity to inventory.
+        // The harvester's share is tracked as a separate financial expense below,
+        // not as a physical inventory deduction.
+        if ($harvest->quantity > 0) {
+            $inventoryItem->addStock($harvest->quantity);
+        }
+
         // Update unit price if provided and different
         if ($harvest->price_per_unit && $harvest->price_per_unit != $inventoryItem->unit_price) {
             $inventoryItem->unit_price = $harvest->price_per_unit;
             $inventoryItem->save();
+        }
+
+        // --- Record harvester share as a proper peso expense ---
+        $harvesterShare = (float) ($harvest->harvester_share ?? 0);
+        if ($harvesterShare > 0) {
+            $pricePerUnit = (float) ($harvest->price_per_unit ?? 0);
+            $shareValue = $harvesterShare * $pricePerUnit;
+
+            $shareDescription = "Harvester crop share: {$harvesterShare} {$harvest->unit}";
+            if ($pricePerUnit > 0) {
+                $shareDescription .= " at ₱" . number_format($pricePerUnit, 2) . "/{$harvest->unit}";
+            }
+
+            $notes = "Auto-generated from harvest #{$harvest->id}. "
+                . "Gross: {$harvest->quantity} {$harvest->unit}, "
+                . "Share: {$harvesterShare} {$harvest->unit} "
+                . "({$harvest->harvester_share_percentage}%).";
+
+            if ($pricePerUnit <= 0) {
+                $notes .= " WARNING: price_per_unit was not set — expense amount is ₱0. "
+                    . "Update the harvest price to correct this.";
+            }
+
+            \App\Models\Expense::create([
+                'description' => $shareDescription,
+                'amount' => $shareValue,
+                'category' => \App\Models\Expense::CATEGORY_LABOR,
+                'date' => $harvest->harvest_date ?? now(),
+                'user_id' => $user->id,
+                'payment_method' => 'crop_share',
+                'notes' => $notes,
+                'related_entity_type' => \App\Models\Expense::ENTITY_TYPE_HARVEST,
+                'related_entity_id' => $harvest->id,
+                'planting_id' => $harvest->planting_id,
+            ]);
         }
     }
 }

@@ -4,6 +4,16 @@
       <!-- Header -->
       <div class="flex justify-between items-center mb-8">
         <div>
+          <button
+            type="button"
+            @click="router.push('/weather')"
+            class="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors mb-4"
+          >
+            <svg class="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Weather
+          </button>
           <h1 class="text-3xl font-bold text-gray-900">Weather Reports</h1>
           <p class="text-gray-600 mt-2">Analyze weather patterns and their impact on your farm</p>
         </div>
@@ -22,11 +32,10 @@
           </button>
         </div>
       </div>
-
       <!-- Filters -->
       <div class="bg-white rounded-lg shadow-md p-6 mb-6">
         <h2 class="text-lg font-semibold mb-4">Report Filters</h2>
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">Date Range</label>
             <select
@@ -39,36 +48,13 @@
               <option value="lastyear">Last Year</option>
             </select>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">Field</label>
-            <select
-              v-model="selectedField"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Fields</option>
-              <option value="north">North Field</option>
-              <option value="south">South Field</option>
-              <option value="east">East Field</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">Weather Station</label>
-            <select
-              v-model="selectedStation"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Stations</option>
-              <option value="main">Main Station</option>
-              <option value="north">North Station</option>
-              <option value="south">South Station</option>
-            </select>
-          </div>
           <div class="flex items-end">
             <button
               @click="updateReport"
-              class="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              :disabled="loading"
+              class="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             >
-              Update Report
+              {{ loading ? 'Loading...' : 'Update Report' }}
             </button>
           </div>
         </div>
@@ -216,6 +202,44 @@
         </div>
       </div>
 
+      <!-- Historical Weather Data -->
+      <div class="mt-8">
+        <div class="bg-white rounded-lg shadow-md overflow-hidden">
+          <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-xl font-semibold text-gray-900">Historical Weather Data</h2>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Condition</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Temp (°C)</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rainfall (mm)</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Humidity (%)</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wind (km/h)</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr v-if="dailyHistory.length === 0">
+                  <td colspan="6" class="px-6 py-4 text-center text-sm text-gray-500">
+                    No historical data available for this period.
+                  </td>
+                </tr>
+                <tr v-for="day in dailyHistory" :key="day.date">
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ formatDate(day.date) }}</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">{{ day.condition }}</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ day.temperature }}</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ day.rainfall }}</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ day.humidity }}</td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ day.wind_speed }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <!-- Weather Impact Analysis -->
       <div class="mt-8">
         <div class="bg-white rounded-lg shadow-md p-6">
@@ -226,15 +250,24 @@
               <div class="space-y-2">
                 <div class="flex justify-between text-sm">
                   <span class="text-gray-600">Growth Stage</span>
-                  <span class="font-medium">Vegetative</span>
+                  <span class="font-medium">{{ weatherImpact.crop_development.growth_stage }}</span>
                 </div>
                 <div class="flex justify-between text-sm">
                   <span class="text-gray-600">Days to Maturity</span>
-                  <span class="font-medium">45 days</span>
+                  <span class="font-medium">{{ weatherImpact.crop_development.days_to_maturity }}</span>
                 </div>
                 <div class="flex justify-between text-sm">
                   <span class="text-gray-600">Stress Level</span>
-                  <span class="font-medium text-green-600">Low</span>
+                  <span 
+                    class="font-medium"
+                    :class="{
+                      'text-green-600': weatherImpact.crop_development.stress_level === 'Low',
+                      'text-yellow-600': weatherImpact.crop_development.stress_level === 'Moderate',
+                      'text-red-600': weatherImpact.crop_development.stress_level === 'High'
+                    }"
+                  >
+                    {{ weatherImpact.crop_development.stress_level }}
+                  </span>
                 </div>
               </div>
             </div>
@@ -243,29 +276,46 @@
               <div class="space-y-2">
                 <div class="flex justify-between text-sm">
                   <span class="text-gray-600">Soil Moisture</span>
-                  <span class="font-medium">Optimal</span>
+                  <span class="font-medium">{{ weatherImpact.field_conditions.soil_moisture }}</span>
                 </div>
                 <div class="flex justify-between text-sm">
                   <span class="text-gray-600">Field Workability</span>
-                  <span class="font-medium">Good</span>
+                  <span class="font-medium">{{ weatherImpact.field_conditions.field_workability }}</span>
                 </div>
                 <div class="flex justify-between text-sm">
                   <span class="text-gray-600">Disease Risk</span>
-                  <span class="font-medium text-yellow-600">Moderate</span>
+                  <span 
+                    class="font-medium"
+                    :class="{
+                      'text-green-600': weatherImpact.field_conditions.disease_risk === 'Low',
+                      'text-yellow-600': weatherImpact.field_conditions.disease_risk === 'Moderate',
+                      'text-red-600': weatherImpact.field_conditions.disease_risk === 'High'
+                    }"
+                  >
+                    {{ weatherImpact.field_conditions.disease_risk }}
+                  </span>
+                </div>
+                <!-- Data Quality Score Added From Open Question -->
+                <div class="flex justify-between text-sm mt-3 pt-3 border-t border-gray-100">
+                  <span class="text-gray-600">Data Reliability Score</span>
+                  <span 
+                    class="font-medium"
+                    :class="weatherImpact.data_quality >= 80 ? 'text-green-600' : 'text-yellow-600'"
+                  >
+                    {{ weatherImpact.data_quality }}%
+                  </span>
                 </div>
               </div>
             </div>
             <div>
               <h3 class="font-medium text-gray-900 mb-3">Recommendations</h3>
               <div class="space-y-2">
-                <div class="text-sm text-gray-600">
-                  • Monitor soil moisture levels
+                <div v-for="(rec, index) in weatherImpact.recommendations" :key="index" class="text-sm text-gray-600 flex items-start">
+                  <span class="mr-2">•</span>
+                  <span>{{ rec }}</span>
                 </div>
-                <div class="text-sm text-gray-600">
-                  • Consider fungicide application
-                </div>
-                <div class="text-sm text-gray-600">
-                  • Plan irrigation schedule
+                <div v-if="weatherImpact.recommendations.length === 0" class="text-sm text-gray-500 italic">
+                  No specific recommendations at this time.
                 </div>
               </div>
             </div>
@@ -283,8 +333,6 @@ import LineChart from '@/Components/Charts/LineChart.vue'
 import BarChart from '@/Components/Charts/BarChart.vue'
 
 const dateRange = ref('last30days')
-const selectedField = ref('')
-const selectedStation = ref('')
 const weatherData = ref([])
 const loading = ref(true)
 
@@ -302,7 +350,25 @@ const gddData = ref({
   season: 0
 })
 
+const weatherImpact = ref({
+  crop_development: {
+    growth_stage: 'N/A',
+    days_to_maturity: 'N/A',
+    stress_level: 'Low'
+  },
+  field_conditions: {
+    soil_moisture: 'Unknown',
+    field_workability: 'Unknown',
+    disease_risk: 'Low'
+  },
+  recommendations: [],
+  data_quality: 100
+})
+
+
+
 const weatherEvents = ref([])
+const dailyHistory = ref([])
 
 const getEventIcon = (type) => {
   const icons = {
@@ -323,10 +389,8 @@ const updateReport = async () => {
   // Reload report data with current filters
   try {
     await loadWeatherData()
-    alert('Report updated successfully')
   } catch (error) {
     console.error('Failed to update report:', error)
-    alert('Failed to update report')
   }
 }
 
@@ -334,10 +398,8 @@ const generateReport = async () => {
   // Generate new report with current filters
   try {
     await loadWeatherData()
-    alert('Report generated successfully')
   } catch (error) {
     console.error('Failed to generate report:', error)
-    alert('Failed to generate report')
   }
 }
 
@@ -354,10 +416,8 @@ const exportReport = () => {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-    alert('Report exported successfully')
   } catch (error) {
     console.error('Failed to export report:', error)
-    alert('Failed to export report')
   }
 }
 
@@ -438,7 +498,9 @@ const loadWeatherData = async () => {
     }
     const period = periodMap[dateRange.value] || 30
     
-    const response = await reportsAPI.getWeatherReport(period)
+    // Pass field ID if selected, otherwise null for all fields
+    const fieldId = null
+    const response = await reportsAPI.getWeatherReport(period, fieldId)
     const data = response.data.data || response.data
     
     if (data.weather_summary) {
@@ -469,16 +531,32 @@ const loadWeatherData = async () => {
     
     if (data.weather_events) {
       weatherEvents.value = data.weather_events
+    } else {
+      weatherEvents.value = []
+    }
+
+    if (data.daily_history) {
+      dailyHistory.value = data.daily_history
+    } else {
+      dailyHistory.value = []
+    }
+
+    if (data.weather_impact_analysis) {
+      weatherImpact.value = data.weather_impact_analysis
     }
   } catch (error) {
     console.error('Error loading weather data:', error)
-    alert('Failed to load weather data')
   } finally {
     loading.value = false
   }
 }
 
-onMounted(() => {
+import { useRoute, useRouter } from 'vue-router'
+
+const router = useRouter()
+const route = useRoute()
+
+onMounted(async () => {
   loadWeatherData()
 })
 </script>

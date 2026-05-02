@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { useNotificationStore } from '@/stores/notification';
 
 // API Base Configuration
 const API_BASE_URL = '/api';
@@ -37,7 +38,7 @@ const shouldRetry = (error) => {
   if (error.response && error.response.status >= 400 && error.response.status < 500) {
     return error.response.status === 408; // Only retry on request timeout
   }
-  
+
   return (
     !error.response || // Network error
     error.response.status >= 500 || // Server error
@@ -61,29 +62,76 @@ api.interceptors.request.use(
 
 // Response interceptor for error handling
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Handle Success Notifications for non-GET requests
+    if (['post', 'put', 'patch', 'delete'].includes(response.config.method)) {
+      const notificationStore = useNotificationStore();
+      const message = response.data?.message || 'Action completed successfully';
+
+      // Check if it's not a background sync or similar silent operation
+      if (!response.config?.silent) {
+        notificationStore.success(message);
+      }
+    }
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
-    
+    const notificationStore = useNotificationStore();
+
     // Log error for debugging
     console.error('API Error:', error);
 
     if (error.response && error.response.status === 422) {
       console.error('422 Validation Error Details:', error.response.data);
-      // This is the crucial part. The backend sends the validation errors here.
+      // For validation errors, we might not want a global toast if the form handles it inline
+      // But for now, let's show a generic "Check form" message if needed, or rely on form handling.
+      // Often, 422s are handled by specific components.
+      // Let's optionally show it if it's a critical action or configured to do so.
+      // For global feedback requested by user:
+      notificationStore.error(error.response.data.message || 'Please check your input.');
     }
     // Handle authentication errors
-    if (error.response?.status === 401) {
+    else if (error.response?.status === 401) {
       localStorage.removeItem('token');
       delete axios.defaults.headers.common['Authorization'];
+
       // Use router if available, otherwise fallback to window.location
       if (window.location.pathname !== '/login') {
+        // Don't toast on auth error redirect, it's disruptive
         window.location.href = '/login';
       }
       return Promise.reject(error);
     }
-    
-    // Handle timeout and network errors with retry
+    else {
+      // General Error Handling
+      let errorMessage = 'An unexpected error occurred.';
+
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.userMessage) {
+        errorMessage = error.userMessage;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      // Check for timeout/network specific messages from retry logic
+      if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Request timed out. Please try again.';
+      } else if (!error.response) {
+        errorMessage = 'Network error. Please check your connection.';
+      } else if (error.response?.status >= 500) {
+        errorMessage = 'Server error. Please try again later.';
+      }
+
+      // Ensure we don't spam toasts if one is already showing for the exact same error?
+      // For now, just show it.
+      if (!originalRequest?.silent) {
+        notificationStore.error(errorMessage);
+      }
+    }
+
+    // Handle timeout and network errors with retry (EXISTING LOGIC)
     if (shouldRetry(error) && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
@@ -91,35 +139,27 @@ api.interceptors.response.use(
         return await retryRequest(originalRequest);
       } catch (retryError) {
         console.error('Request failed after retries:', retryError);
-        // Add more specific error messages
-        if (retryError.code === 'ECONNABORTED') {
-          retryError.userMessage = 'Request timed out. The server may be slow or unavailable.';
-        } else if (!retryError.response) {
-          retryError.userMessage = 'Network error. Please check your internet connection.';
-        }
+        // The error from retryRequest will propagate up and trigger the catch block above (or promise rejection)
+        // But since we are inside the interceptor's error handler, we need to return reject.
+
+        // Note: The recursive retryRequest calls api(), which triggers interceptors again.
+        // This might lead to duplicate toasts if not careful. 
+        // But retryRequest uses the 'api' instance. 
+        // Let's rely on the final rejection to show the toast? 
+        // Actually, if we retry, we don't want to show toast yet.
+        // But we already showed it above because we are in the error handler!
+
+        // Refinement: Move Notification Logic AFTER Retry Logic checks?
+        // If we are observing a retry-able error, we might want to wait.
+        // However, existing structure has retry logic separate.
+
+        // Let's keep it simple for now. If it retries, the user might see an error then a success. 
+        // Or multiple errors if all retries fail.
+
         return Promise.reject(retryError);
       }
     }
-    
-    // Handle server errors gracefully
-    if (error.response?.status >= 500) {
-      console.error('Server error detected:', error.response.status);
-      // Show user-friendly error message
-      error.userMessage = 'Server is temporarily unavailable. Please try again later.';
-    }
-    
-    // Handle network errors
-    if (!error.response) {
-      console.error('Network error or server unreachable');
-      error.userMessage = 'Network connection failed. Please check your internet connection.';
-    }
-    
-    // Handle timeout errors
-    if (error.code === 'ECONNABORTED') {
-      console.error('Request timeout');
-      error.userMessage = 'Request timed out. Please try again.';
-    }
-    
+
     return Promise.reject(error);
   }
 );
@@ -161,7 +201,7 @@ export const farmProfileAPI = {
       cropping_seasons: data.cropping_seasons || null,
       farming_challenges: data.farming_challenges || [],
     };
-    
+
     console.log("📦 Sending payload to /api/farmer/profile:", payload);
     return api.post('/farmer/profile', payload);
   },
@@ -176,38 +216,17 @@ export const farmProfileAPI = {
       rice_area: parseFloat(data.rice_area) || 0,
       farming_experience: data.farming_experience ? parseInt(data.farming_experience) : null,
       farm_description: data.farm_description || null,
-      
-      // Field Information
-      field_name: data.field_name || 'Main Rice Field',
-      
-      // Soil Information
-      soil_type: data.soil_type,
-      soil_ph: data.soil_ph ? parseFloat(data.soil_ph) : null,
-      organic_matter_content: data.organic_matter_content ? parseFloat(data.organic_matter_content) : null,
-      nitrogen_level: data.nitrogen_level ? parseFloat(data.nitrogen_level) : null,
-      phosphorus_level: data.phosphorus_level ? parseFloat(data.phosphorus_level) : null,
-      potassium_level: data.potassium_level ? parseFloat(data.potassium_level) : null,
-      elevation: data.elevation ? parseFloat(data.elevation) : null,
-      
-      // Water Management
-      water_source: data.water_source,
-      irrigation_type: data.irrigation_type,
-      water_access: data.water_access,
-      drainage_quality: data.drainage_quality,
-      
-      // Rice Varieties and Practices
-      preferred_varieties: Array.isArray(data.preferred_varieties) ? data.preferred_varieties : [],
-      planting_method: data.planting_method || null,
-      previous_yield: data.previous_yield ? parseFloat(data.previous_yield) : null,
-      target_yield: data.target_yield ? parseFloat(data.target_yield) : null,
-      cropping_seasons: data.cropping_seasons || null,
-      farming_challenges: Array.isArray(data.farming_challenges) ? data.farming_challenges : [],
+
+      // Field Information - REMOVED
+      // Soil Information - REMOVED
+      // Water Management - REMOVED
     };
-    
+
+
     console.log("📦 Sending rice farm profile data to API:", payload);
     return api.post('/farmer/profile', payload);
   },
-  
+
   update: (profileData) => api.put('/farmer/profile', profileData),
 };
 
@@ -229,6 +248,16 @@ export const plantingsAPI = {
   delete: (id) => api.delete(`/plantings/${id}`),
 };
 
+// Seed Plantings API
+export const seedPlantingsAPI = {
+  getAll: () => api.get('/seed-plantings'),
+  getById: (id) => api.get(`/seed-plantings/${id}`),
+  create: (data) => api.post('/seed-plantings', data),
+  update: (id, data) => api.put(`/seed-plantings/${id}`, data),
+  delete: (id) => api.delete(`/seed-plantings/${id}`),
+  getReady: () => api.get('/seed-plantings/ready'),
+};
+
 // Tasks API
 export const tasksAPI = {
   getAll: () => api.get('/tasks'),
@@ -241,7 +270,7 @@ export const tasksAPI = {
 
 // Harvests API
 export const harvestsAPI = {
-  getAll: () => api.get('/harvests'),
+  getAll: (params = {}) => api.get('/harvests', { params }),
   getById: (id) => api.get(`/harvests/${id}`),
   create: (harvestData) => api.post('/harvests', harvestData),
   update: (id, harvestData) => api.put(`/harvests/${id}`, harvestData),
@@ -261,12 +290,14 @@ export const inventoryAPI = {
 };
 
 // Weather API
+// Weather API
 export const weatherAPI = {
-  getCurrentWeather: (fieldId) => api.get(`/weather/fields/${fieldId}/current`),
-  getForecast: (fieldId) => api.get(`/weather/fields/${fieldId}/forecast`),
-  getHistory: (fieldId, days = 30) => api.get(`/weather/fields/${fieldId}/history?days=${days}`),
-  getAlerts: (fieldId) => api.get(`/weather/fields/${fieldId}/alerts`),
-  updateWeather: (fieldId, weatherData) => api.post(`/weather/fields/${fieldId}/update`, weatherData),
+  getCurrentWeather: (farmId) => api.get(`/weather/farms/${farmId}/current`),
+  getForecast: (farmId, days = 7) => api.get(`/weather/farms/${farmId}/forecast`, { params: { days } }),
+  getHistory: (farmId, days = 30) => api.get(`/weather/farms/${farmId}/history`, { params: { days } }),
+  getAlerts: (farmId) => api.get(`/weather/farms/${farmId}/alerts`),
+  updateWeather: (farmId, weatherData) => api.post(`/weather/farms/${farmId}/update`, weatherData),
+  getRiceAnalytics: (farmId) => api.get(`/weather/farms/${farmId}/rice-analytics`),
   // ColorfulClouds Weather API proxy
   getColorfulCloudsWeather: (lat, lon, options = {}) => {
     const params = {
@@ -278,6 +309,17 @@ export const weatherAPI = {
     };
     return api.get('/weather/colorfulclouds', { params });
   },
+
+  // Farm Analytics
+  getAnalytics: (farmId, params = {}) => api.get(`/analytics/farm/${farmId}`, { params }),
+  getTrends: (farmId, params = {}) => api.get(`/analytics/farm/${farmId}/trends`, { params }),
+  getRecommendations: (farmId, params = {}) => api.get(`/analytics/farm/${farmId}/recommendations`, { params }),
+  getDataQuality: (farmId, params = {}) => api.get(`/analytics/farm/${farmId}/data-quality`, { params }),
+  getImpactAnalysis: (farmId, params = {}) => api.get(`/analytics/farm/${farmId}/impact`, { params }),
+  getYieldPredictions: (farmId, params = {}) => api.get(`/analytics/farm/${farmId}/yield`, { params }),
+  getRiskAssessment: (farmId, params = {}) => api.get(`/analytics/farm/${farmId}/risk`, { params }),
+  getIrrigationRecommendations: (farmId, params = {}) => api.get(`/analytics/farm/${farmId}/irrigation`, { params }),
+  getPestDiseaseRisk: (farmId, params = {}) => api.get(`/analytics/farm/${farmId}/pest-risk`, { params }),
 };
 
 // Rice Marketplace API
@@ -288,15 +330,44 @@ export const riceMarketplaceAPI = {
   updateProduct: (id, productData) => api.put(`/rice-marketplace/products/${id}`, productData),
   deleteProduct: (id) => api.delete(`/rice-marketplace/products/${id}`),
   getStats: () => api.get('/rice-marketplace/stats'),
-  
+
+  // Image management
+  uploadImages: (formData) => api.post('/rice-marketplace/products/images/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  deleteImage: (url) => api.post('/rice-marketplace/products/images/delete', { url }),
+
   // Orders
   getOrders: (filters = {}) => api.get('/rice-marketplace/orders', { params: filters }),
   getOrderById: (id) => api.get(`/rice-marketplace/orders/${id}`),
   createOrder: (orderData) => api.post('/rice-marketplace/orders', orderData),
-  confirmOrder: (id, data = {}) => api.post(`/rice-marketplace/orders/${id}/confirm`, data),
+  confirmOrder: (id, data = {}) => api.post(`/rice-marketplace/orders/${id}/accept`, data),
+  markReadyForPickup: (id) => api.post(`/rice-marketplace/orders/${id}/ready-for-pickup`),
+  confirmPickup: (id) => api.post(`/rice-marketplace/orders/${id}/confirm-pickup`),
+  markOrderAsPaid: (id) => api.post(`/rice-marketplace/orders/${id}/mark-paid`),
   cancelOrder: (id, data) => api.post(`/rice-marketplace/orders/${id}/cancel`, data),
   getOrderMessages: (id) => api.get(`/rice-marketplace/orders/${id}/messages`),
   sendOrderMessage: (id, payload) => api.post(`/rice-marketplace/orders/${id}/messages`, payload),
+
+  // Price Negotiations
+  getNegotiations: (orderId) => api.get(`/rice-marketplace/orders/${orderId}/negotiations`),
+  proposeNegotiation: (orderId, proposedPrice) => api.post(`/rice-marketplace/orders/${orderId}/negotiations`, { proposed_price: proposedPrice }),
+  respondToNegotiation: (negotiationId, action, counterPrice = null, message = null) => api.post(`/rice-marketplace/negotiations/${negotiationId}/respond`, {
+    action,
+    counter_price: counterPrice,
+    message,
+  }),
+};
+
+// Cart API
+export const cartAPI = {
+  get: () => api.get('/rice-marketplace/cart'),
+  add: (itemData) => api.post('/rice-marketplace/cart', itemData),
+  update: (itemId, itemData) => api.put(`/rice-marketplace/cart/${itemId}`, itemData),
+  remove: (itemId) => api.delete(`/rice-marketplace/cart/${itemId}`),
+  clear: () => api.delete('/rice-marketplace/cart'),
+  checkout: (checkoutData) => api.post('/rice-marketplace/cart/checkout', checkoutData),
+  count: () => api.get('/rice-marketplace/cart/count'),
 };
 
 // Legacy Marketplace API (for backward compatibility)
@@ -344,12 +415,16 @@ export const laborAPI = {
   createLaborer: (laborerData) => api.post('/laborers', laborerData),
   updateLaborer: (id, laborerData) => api.put(`/laborers/${id}`, laborerData),
   deleteLaborer: (id) => api.delete(`/laborers/${id}`),
-  
+
   getWages: () => api.get('/labor-wages'),
   getWageById: (id) => api.get(`/labor-wages/${id}`),
   createWage: (wageData) => api.post('/labor-wages', wageData),
   updateWage: (id, wageData) => api.put(`/labor-wages/${id}`, wageData),
   deleteWage: (id) => api.delete(`/labor-wages/${id}`),
+
+  // Groups
+  getGroups: () => api.get('/laborers/groups'),
+  addMembers: (groupId, laborerIds) => api.post(`/laborers/groups/${groupId}/members`, { laborer_ids: laborerIds }),
 };
 
 // Dashboard API
@@ -367,8 +442,21 @@ export const analyticsAPI = {
 // Reports API
 export const reportsAPI = {
   getFinancialReport: (period = '365') => api.get(`/reports/financial?period=${period}`),
-  getCropYieldReport: (period = '365') => api.get(`/reports/crop-yield?period=${period}`),
-  getWeatherReport: (period = '365') => api.get(`/reports/weather?period=${period}`),
+  getCropYieldReport: (params = {}) => {
+    const period = params.period || '365';
+    const crop = params.crop || '';
+    const field = params.field || '';
+    let url = `/reports/crop-yield?period=${period}`;
+    if (crop) url += `&crop=${crop}`;
+    if (field) url += `&field=${field}`;
+    return api.get(url);
+  },
+  getCropYieldFilterOptions: () => api.get('/reports/crop-yield/filter-options'),
+  getWeatherReport: (period = '365', fieldId = null) => {
+    let url = `/reports/weather?period=${period}`;
+    if (fieldId) url += `&field_id=${fieldId}`;
+    return api.get(url);
+  },
   getLaborCostReport: (period = '365') => api.get(`/reports/labor-cost?period=${period}`),
   getInventoryUsageReport: (period = '365') => api.get(`/reports/inventory-usage?period=${period}`),
 };
@@ -405,6 +493,15 @@ export const riceFarmingAPI = {
   advanceStage: (plantingId, stageData) => api.post(`/rice-farming/plantings/${plantingId}/advance-stage`, stageData),
   getRecommendations: (plantingId) => api.get(`/rice-farming/plantings/${plantingId}/recommendations`),
   markStageDelayed: (stageId, delayData) => api.post(`/rice-farming/stages/${stageId}/delay`, delayData),
+};
+
+// Notifications API
+export const notificationsAPI = {
+  getAll: (params = {}) => api.get('/notifications', { params }), // supports unread_only=true
+  getUnreadCount: () => api.get('/notifications/unread-count'),
+  markAsRead: (id) => api.post(`/notifications/${id}/read`),
+  markAllAsRead: () => api.post('/notifications/read-all'),
+  delete: (id) => api.delete(`/notifications/${id}`),
 };
 
 export default api;

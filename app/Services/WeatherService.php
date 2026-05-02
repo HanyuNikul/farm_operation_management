@@ -2,9 +2,11 @@
 
 namespace App\Services;
 
-use App\Models\Field;
+use App\Models\Farm;
 use App\Models\WeatherLog;
+use App\Models\Task;
 use App\Exceptions\WeatherServiceException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -12,161 +14,210 @@ use Carbon\Carbon;
 
 class WeatherService
 {
-    private string $apiKey;
+    private ?string $apiKey;
     private string $baseUrl;
 
     public function __construct()
     {
         $this->apiKey = config('services.openweather.api_key');
-        $this->baseUrl = config('services.openweather.base_url');
+        $this->baseUrl = config('services.openweather.base_url', 'https://api.open-meteo.com');
     }
 
     /**
-     * Get current weather for a location
+     * Get current weather for a location using Open-Meteo (consistent with seeder)
      */
     public function getCurrentWeather(float $lat, float $lon): ?array
     {
-        // Validate API configuration
-        if (empty($this->apiKey)) {
-            Log::error('OpenWeather API key is not configured');
-            throw new WeatherServiceException(
-                'OpenWeather API key is not configured. Please set OPENWEATHER_API_KEY in your .env file.',
-                ['lat' => $lat, 'lon' => $lon]
-            );
-        }
+        // Round coordinates to 2 decimal places (approx 1.1km) for deduplication
+        $latRounded = round($lat, 2);
+        $lonRounded = round($lon, 2);
 
-        if (empty($this->baseUrl)) {
-            Log::error('OpenWeather base URL is not configured');
-            throw new WeatherServiceException(
-                'OpenWeather base URL is not configured. Please set OPENWEATHER_BASE_URL in your .env file.',
-                ['lat' => $lat, 'lon' => $lon]
-            );
-        }
+        $cacheKey = "weather_current_{$latRounded}_{$lonRounded}";
 
-        try {
-            $response = Http::get("{$this->baseUrl}/weather", [
-                'lat' => $lat,
-                'lon' => $lon,
-                'appid' => $this->apiKey,
-                'units' => 'metric'
-            ]);
-
-            if ($response->successful()) {
-                return $response->json();
-            }
-
-            // Handle specific API errors
-            $statusCode = $response->status();
-            $errorBody = $response->json();
-            
-            if ($statusCode === 401) {
-                Log::error('OpenWeather API authentication failed', [
-                    'status' => $statusCode,
-                    'response' => $errorBody
+        return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($lat, $lon) {
+            try {
+                $response = Http::get("https://api.open-meteo.com/v1/forecast", [
+                    'latitude' => $lat,
+                    'longitude' => $lon,
+                    'current' => 'temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,weather_code',
+                    'timezone' => 'Asia/Manila'
                 ]);
-                throw new WeatherServiceException(
-                    'Invalid OpenWeather API key. Please check your OPENWEATHER_API_KEY in .env',
-                    ['lat' => $lat, 'lon' => $lon, 'status' => $statusCode]
-                );
-            }
 
-            if ($statusCode === 429) {
-                Log::error('OpenWeather API rate limit exceeded', [
-                    'status' => $statusCode,
-                    'response' => $errorBody
+                if ($response->successful()) {
+                    $data = $response->json();
+                    $current = $data['current'];
+
+                    // Map to a structure similar to our expectations or normalize it
+                    return [
+                        'main' => [
+                            'temp' => $current['temperature_2m'],
+                            'humidity' => $current['relative_humidity_2m'],
+                        ],
+                        'wind' => [
+                            'speed' => $current['wind_speed_10m'] / 3.6, // Open-Meteo is km/h, we usually expect m/s in this pipeline
+                        ],
+                        'rain' => [
+                            '1h' => $current['precipitation'],
+                        ],
+                        'weather' => [
+                            [
+                                'main' => $this->mapWmoCode($current['weather_code']),
+                            ]
+                        ],
+                        'dt' => Carbon::parse($current['time'])->timestamp,
+                    ];
+                }
+
+                Log::error('Open-Meteo current weather API error', [
+                    'status' => $response->status(),
+                    'response' => $response->body()
                 ]);
-                throw new WeatherServiceException(
-                    'OpenWeather API rate limit exceeded. Please try again later.',
-                    ['lat' => $lat, 'lon' => $lon, 'status' => $statusCode]
-                );
+
+                return null;
+            } catch (\Exception $e) {
+                Log::error('Open-Meteo weather API request failed', [
+                    'error' => $e->getMessage(),
+                    'lat' => $lat,
+                    'lon' => $lon
+                ]);
+
+                return null;
             }
-
-            Log::error('OpenWeatherMap API error', [
-                'status' => $statusCode,
-                'response' => $response->body()
-            ]);
-
-            return null;
-        } catch (WeatherServiceException $e) {
-            // Re-throw our custom exceptions
-            throw $e;
-        } catch (\Exception $e) {
-            Log::error('Weather API request failed', [
-                'error' => $e->getMessage(),
-                'lat' => $lat,
-                'lon' => $lon
-            ]);
-
-            throw new WeatherServiceException(
-                'Failed to fetch weather data: ' . $e->getMessage(),
-                ['lat' => $lat, 'lon' => $lon, 'error' => $e->getMessage()]
-            );
-        }
+        });
     }
 
     /**
-     * Get weather forecast for a location
+     * Map WMO Weather Codes to our system conditions
+     */
+    private function mapWmoCode(int $code): string
+    {
+        return match (true) {
+            $code === 0 => 'clear',
+            in_array($code, [1, 2, 3]) => 'cloudy',
+            in_array($code, [45, 48]) => 'foggy',
+            in_array($code, [51, 53, 55, 61, 63, 65, 80, 81, 82]) => 'rainy',
+            in_array($code, [71, 73, 75, 77, 85, 86]) => 'snowy',
+            in_array($code, [95, 96, 99]) => 'stormy',
+            default => 'clear',
+        };
+    }
+
+    /**
+     * Get weather forecast for a location using Open-Meteo
      */
     public function getForecast(float $lat, float $lon, int $days = 5): ?array
     {
-        try {
-            // OpenWeatherMap free tier has a maximum of 40 forecasts (5 days)
-            // Request the maximum available to get as many days as possible
-            $maxForecasts = 40; // API limit
-            $requestedForecasts = $days * 8; // 8 forecasts per day (3-hour intervals)
-            $cnt = min($requestedForecasts, $maxForecasts);
-            
-            $response = Http::get("{$this->baseUrl}/forecast", [
-                'lat' => $lat,
-                'lon' => $lon,
-                'appid' => $this->apiKey,
-                'units' => 'metric',
-                'cnt' => $cnt
-            ]);
+        // Round coordinates for consistent cache keys
+        $cacheKey = 'weather_forecast_' . round($lat, 2) . '_' . round($lon, 2);
 
-            if ($response->successful()) {
-                return $response->json();
+        return Cache::remember($cacheKey, now()->addHours(3), function () use ($lat, $lon) {
+            try {
+                $response = Http::get("https://api.open-meteo.com/v1/forecast", [
+                    'latitude' => $lat,
+                    'longitude' => $lon,
+                    'daily' => 'temperature_2m_max,temperature_2m_min,weather_code,precipitation_sum,relative_humidity_2m_max,precipitation_probability_max',
+                    'hourly' => 'temperature_2m,weather_code,precipitation_probability',
+                    'timezone' => 'Asia/Manila',
+                    'models' => 'gfs_seamless'
+                ]);
+
+                if ($response->successful()) {
+                    $data = $response->json();
+                    $daily = $data['daily'];
+
+                    // Map to OWM-like structure that frontend expects
+                    $list = [];
+                    foreach ($daily['time'] as $index => $time) {
+                        $list[] = [
+                            'dt' => Carbon::parse($time)->timestamp,
+                            'main' => [
+                                'temp' => ($daily['temperature_2m_max'][$index] + $daily['temperature_2m_min'][$index]) / 2,
+                                'temp_max' => $daily['temperature_2m_max'][$index],
+                                'temp_min' => $daily['temperature_2m_min'][$index],
+                                'humidity' => $daily['relative_humidity_2m_max'][$index],
+                            ],
+                            'weather' => [
+                                [
+                                    'main' => $this->mapWmoCode($daily['weather_code'][$index]),
+                                ]
+                            ],
+                            'dt_txt' => $time . ' 12:00:00', // Mocking midday
+                            'pop' => isset($daily['precipitation_probability_max'][$index]) ? $daily['precipitation_probability_max'][$index] / 100 : ($daily['precipitation_sum'][$index] > 0 ? 1 : 0),
+                            'hourly' => $this->extractHourlyData($data['hourly'] ?? [], $index),
+                        ];
+                    }
+
+                    return ['list' => $list];
+                }
+
+                Log::error('Open-Meteo forecast API error', [
+                    'status' => $response->status(),
+                    'response' => $response->body()
+                ]);
+
+                return null;
+            } catch (\Exception $e) {
+                Log::error('Open-Meteo forecast API request failed', [
+                    'error' => $e->getMessage(),
+                    'lat' => $lat,
+                    'lon' => $lon
+                ]);
+
+                return null;
             }
-
-            Log::error('OpenWeatherMap forecast API error', [
-                'status' => $response->status(),
-                'response' => $response->body()
-            ]);
-
-            return null;
-        } catch (\Exception $e) {
-            Log::error('Weather forecast API request failed', [
-                'error' => $e->getMessage(),
-                'lat' => $lat,
-                'lon' => $lon
-            ]);
-
-            return null;
-        }
+        });
     }
 
     /**
-     * Update weather data for a field
+     * Extract 24 hours of data for a specific day index
      */
-    public function updateFieldWeather(Field $field, ?array $weatherData = null): ?WeatherLog
+    private function extractHourlyData(array $hourly, int $dayIndex): array
     {
-        // Get coordinates from location or fallback to field_coordinates
-        $lat = null;
-        $lon = null;
-        
-        if (isset($field->location['lat']) && isset($field->location['lon'])) {
-            $lat = (float) $field->location['lat'];
-            $lon = (float) $field->location['lon'];
-        } elseif (isset($field->field_coordinates['lat']) && isset($field->field_coordinates['lon'])) {
-            // Fallback to field_coordinates if location doesn't have coordinates
-            $lat = (float) $field->field_coordinates['lat'];
-            $lon = (float) $field->field_coordinates['lon'];
+        $hours = [];
+        $startIndex = $dayIndex * 24;
+
+        if (!isset($hourly['time']))
+            return [];
+
+        for ($i = 0; $i < 24; $i++) {
+            $currentIndex = $startIndex + $i;
+            if (isset($hourly['time'][$currentIndex])) {
+                $pop = ($hourly['precipitation_probability'][$currentIndex] ?? 0) / 100;
+                $code = $hourly['weather_code'][$currentIndex] ?? 0;
+                $condition = $this->mapWmoCode($code);
+
+                // If rain chance is high (> 50%) and condition is not already severe, force it to rainy
+                if ($pop > 0.5 && !in_array($condition, ['rainy', 'stormy', 'snowy'])) {
+                    $condition = 'rainy';
+                }
+
+                $hours[] = [
+                    'time' => Carbon::parse($hourly['time'][$currentIndex])->format('H:i'),
+                    'temp' => $hourly['temperature_2m'][$currentIndex] ?? 0,
+                    'pop' => $pop,
+                    'code' => $code,
+                    'icon' => $condition,
+                ];
+            }
         }
-        
-        if ($lat === null || $lon === null) {
-            Log::warning('Field location coordinates missing', ['field_id' => $field->id]);
+
+        return $hours;
+    }
+
+    /**
+     * Update weather data for a farm
+     */
+    public function updateFarmWeather(Farm $farm, ?array $weatherData = null): ?WeatherLog
+    {
+        $coords = $farm->weather_coordinates;
+
+        if (!$coords || !$coords['lat'] || !$coords['lon']) {
+            Log::warning('Farm coordinates missing', ['farm_id' => $farm->id]);
             return null;
         }
+
+        $lat = (float) $coords['lat'];
+        $lon = (float) $coords['lon'];
 
         if ($weatherData === null) {
             $weatherData = $this->getCurrentWeather($lat, $lon);
@@ -178,7 +229,7 @@ class WeatherService
 
         if (!isset($weatherData['main']['temp'], $weatherData['main']['humidity'])) {
             Log::warning('Incomplete weather payload from weather provider', [
-                'field_id' => $field->id,
+                'farm_id' => $farm->id,
                 'weather_data' => $weatherData,
             ]);
             return null;
@@ -189,27 +240,56 @@ class WeatherService
                 ? round($weatherData['wind']['speed'] * 3.6, 1) // convert m/s to km/h
                 : 0;
 
+            // Extract rainfall from API response
+            $rainfall = 0;
+            if (isset($weatherData['rain']['1h'])) {
+                $rainfall = round($weatherData['rain']['1h'], 2);
+            } elseif (isset($weatherData['rain']['3h'])) {
+                $rainfall = round($weatherData['rain']['3h'] / 3, 2);
+            }
+
             $recordedAt = isset($weatherData['dt'])
                 ? Carbon::createFromTimestamp($weatherData['dt'])
                 : now();
 
+            // Prevent duplicate logs for the same farm within the same hour
+            $existingLog = WeatherLog::where('farm_id', $farm->id)
+                ->whereBetween('recorded_at', [
+                    (clone $recordedAt)->subMinutes(30),
+                    (clone $recordedAt)->addMinutes(30)
+                ])
+                ->first();
+
+            if ($existingLog) {
+                $existingLog->update([
+                    'temperature' => round($weatherData['main']['temp'], 1),
+                    'humidity' => $weatherData['main']['humidity'],
+                    'wind_speed' => $windSpeed,
+                    'rainfall' => $rainfall,
+                    'conditions' => $this->mapWeatherCondition($weatherData['weather'][0]['main'] ?? 'clear'),
+                ]);
+
+                $farm->setRelation('latestWeather', $existingLog);
+                return $existingLog;
+            }
+
             $weatherLog = WeatherLog::create([
-                'field_id' => $field->id,
+                'farm_id' => $farm->id,
                 'temperature' => round($weatherData['main']['temp'], 1),
                 'humidity' => $weatherData['main']['humidity'],
                 'wind_speed' => $windSpeed,
+                'rainfall' => $rainfall,
                 'conditions' => $this->mapWeatherCondition($weatherData['weather'][0]['main'] ?? 'clear'),
                 'recorded_at' => $recordedAt,
             ]);
 
-            // Ensure subsequent calls use the freshly created log without re-querying
-            $field->setRelation('latestWeather', $weatherLog);
+            $farm->setRelation('latestWeather', $weatherLog);
 
             return $weatherLog;
         } catch (\Exception $e) {
             Log::error('Failed to save weather data', [
                 'error' => $e->getMessage(),
-                'field_id' => $field->id,
+                'farm_id' => $farm->id,
                 'weather_data' => $weatherData
             ]);
 
@@ -228,9 +308,9 @@ class WeatherService
 
         return [
             'id' => $weatherLog->id,
-            'field_id' => $weatherLog->field_id,
+            'farm_id' => $weatherLog->farm_id,
             'temperature' => (float) $weatherLog->temperature,
-            'temperature_fahrenheit' => round(($weatherLog->temperature * 9/5) + 32, 1),
+            'temperature_fahrenheit' => round(($weatherLog->temperature * 9 / 5) + 32, 1),
             'humidity' => (float) $weatherLog->humidity,
             'wind_speed' => (float) $weatherLog->wind_speed,
             'rainfall' => (float) ($weatherLog->rainfall ?? 0),
@@ -242,21 +322,73 @@ class WeatherService
     }
 
     /**
-     * Update weather data for all fields
+     * Update weather data for all farms
+     * 
+     * Logs any farms that are skipped due to missing or invalid coordinates
+     * instead of silently failing.
      */
-    public function updateAllFieldsWeather(): int
+    public function updateAllFarmsWeather(): int
     {
-        $fields = Field::whereNotNull('location')->get();
+        // Get all farms, including those with null coordinates (to log them)
+        $allFarms = Farm::all();
         $updated = 0;
+        $skipped = 0;
+        $failed = 0;
 
-        foreach ($fields as $field) {
-            if ($this->updateFieldWeather($field)) {
-                $updated++;
+        foreach ($allFarms as $farm) {
+            /** @var \App\Models\Farm $farm */
+            $coords = $farm->weather_coordinates;
+            
+            // Validate coordinates
+            if (!$coords) {
+                Log::warning("Weather update skipped: Farm {$farm->id} ({$farm->name}) has no coordinates configured");
+                $skipped++;
+                continue;
             }
             
-            // Add delay to respect API rate limits
-            sleep(1);
+            if (!isset($coords['lat'], $coords['lon'])) {
+                Log::warning("Weather update skipped: Farm {$farm->id} ({$farm->name}) has incomplete coordinates (missing lat/lon)", [
+                    'farm_coordinates' => $farm->farm_coordinates,
+                ]);
+                $skipped++;
+                continue;
+            }
+            
+            // Validate coordinate ranges
+            if ($coords['lat'] < -90 || $coords['lat'] > 90 || $coords['lon'] < -180 || $coords['lon'] > 180) {
+                Log::warning("Weather update skipped: Farm {$farm->id} ({$farm->name}) has invalid coordinates", [
+                    'lat' => $coords['lat'],
+                    'lon' => $coords['lon'],
+                ]);
+                $skipped++;
+                continue;
+            }
+
+            try {
+                $weatherData = $this->getCurrentWeather((float) $coords['lat'], (float) $coords['lon']);
+
+                if ($weatherData && $this->updateFarmWeather($farm, $weatherData)) {
+                    $updated++;
+                } else {
+                    Log::debug("Weather update failed for farm {$farm->id} ({$farm->name}): No weather data returned");
+                    $failed++;
+                }
+            } catch (\Exception $e) {
+                Log::error("Weather update error for farm {$farm->id} ({$farm->name}): {$e->getMessage()}", [
+                    'exception' => get_class($e),
+                ]);
+                $failed++;
+            }
+
+            usleep(100000); // 100ms delay between farms
         }
+
+        Log::info("Weather update completed", [
+            'updated' => $updated,
+            'skipped' => $skipped,
+            'failed' => $failed,
+            'total' => $updated + $skipped + $failed,
+        ]);
 
         return $updated;
     }
@@ -264,20 +396,30 @@ class WeatherService
     /**
      * Get weather alerts for rice farming conditions
      */
-    public function getWeatherAlerts(Field $field): array
+    public function getWeatherAlerts(Farm $farm): array
     {
         $alerts = [];
-        $latestWeather = $field->latestWeather;
+        $latestWeather = $farm->latestWeather;
+        /** @var WeatherLog|null $latestWeather */
 
         if (!$latestWeather) {
             return $alerts;
         }
 
-        // Get current rice planting if exists
-        $currentPlanting = $field->getCurrentRicePlanting();
-        $currentStage = $currentPlanting?->getCurrentStage();
+        // Get current rice planting from any field on this farm
+        $currentPlanting = null;
+        $currentStage = null;
+        foreach ($farm->fields as $field) {
+            $planting = $field->getCurrentRicePlanting();
+            if ($planting) {
+                $currentPlanting = $planting;
+                $currentStage = $planting->getCurrentStage();
+                break;
+            }
+        }
 
         // Rice-specific temperature alerts
+        // Use property access on the WeatherLog model instance
         $recordedAt = optional($latestWeather->recorded_at)->toIso8601String();
         $temperature = (float) $latestWeather->temperature;
         $humidity = (float) $latestWeather->humidity;
@@ -315,7 +457,7 @@ class WeatherService
         // Rice growth stage specific alerts
         if ($currentStage) {
             $stageCode = $currentStage->riceGrowthStage->stage_code;
-            
+
             // Flowering stage alerts
             if ($stageCode === 'flowering') {
                 if ($temperature > 30) {
@@ -333,7 +475,7 @@ class WeatherService
                         ]
                     );
                 }
-                
+
                 if ($humidity < 60) {
                     $alerts[] = $this->makeAlert(
                         type: 'low_humidity',
@@ -350,7 +492,7 @@ class WeatherService
                     );
                 }
             }
-            
+
             // Grain filling stage alerts
             if ($stageCode === 'grain_filling') {
                 if ($temperature > 32) {
@@ -437,13 +579,13 @@ class WeatherService
     }
 
     /**
-     * Get weather statistics for a field
+     * Get weather statistics for a farm
      */
-    public function getFieldWeatherStats(Field $field, int $days = 30): array
+    public function getFarmWeatherStats(Farm $farm, int $days = 30): array
     {
         $startDate = Carbon::now()->subDays($days);
-        
-        $weatherLogs = WeatherLog::where('field_id', $field->id)
+
+        $weatherLogs = WeatherLog::where('farm_id', $farm->id)
             ->where('recorded_at', '>=', $startDate)
             ->orderBy('recorded_at')
             ->get();
@@ -459,7 +601,7 @@ class WeatherService
             'avg_humidity' => round($weatherLogs->avg('humidity'), 1),
             'avg_wind_speed' => round($weatherLogs->avg('wind_speed'), 1),
             'most_common_condition' => $weatherLogs->groupBy('conditions')
-                ->map->count()
+                ->map(fn($group) => $group->count())
                 ->sortDesc()
                 ->keys()
                 ->first(),
@@ -469,17 +611,17 @@ class WeatherService
     }
 
     /**
-     * Map OpenWeatherMap weather conditions to our system
+     * Map weather conditions to our system
      */
     private function mapWeatherCondition(string $condition): string
     {
-        return match(strtolower($condition)) {
+        return match (strtolower($condition)) {
             'clear' => WeatherLog::CONDITION_CLEAR,
-            'clouds' => WeatherLog::CONDITION_CLOUDY,
-            'rain', 'drizzle' => WeatherLog::CONDITION_RAINY,
-            'thunderstorm' => WeatherLog::CONDITION_STORMY,
-            'snow' => WeatherLog::CONDITION_SNOWY,
-            'mist', 'fog', 'haze' => WeatherLog::CONDITION_FOGGY,
+            'clouds', 'cloudy' => WeatherLog::CONDITION_CLOUDY,
+            'rain', 'drizzle', 'rainy' => WeatherLog::CONDITION_RAINY,
+            'thunderstorm', 'stormy' => WeatherLog::CONDITION_STORMY,
+            'snow', 'snowy' => WeatherLog::CONDITION_SNOWY,
+            'mist', 'fog', 'haze', 'foggy' => WeatherLog::CONDITION_FOGGY,
             default => WeatherLog::CONDITION_CLEAR
         };
     }
@@ -487,11 +629,11 @@ class WeatherService
     /**
      * Get rice-specific weather analytics
      */
-    public function getRiceWeatherAnalytics(Field $field, int $days = 30): array
+    public function getRiceWeatherAnalytics(Farm $farm, int $days = 30, ?\App\Models\Field $specificField = null): array
     {
         $startDate = Carbon::now()->subDays($days);
-        
-        $weatherLogs = WeatherLog::where('field_id', $field->id)
+
+        $weatherLogs = WeatherLog::where('farm_id', $farm->id)
             ->where('recorded_at', '>=', $startDate)
             ->orderBy('recorded_at')
             ->get();
@@ -501,7 +643,7 @@ class WeatherService
         }
 
         // Basic stats
-        $basicStats = $this->getFieldWeatherStats($field, $days);
+        $basicStats = $this->getFarmWeatherStats($farm, $days);
 
         // Rice-specific analytics
         $riceAnalytics = [
@@ -517,17 +659,91 @@ class WeatherService
             'weather_suitability_score' => $this->calculateWeatherSuitabilityScore($weatherLogs),
         ];
 
-        // Growth stage specific analytics
-        $currentPlanting = $field->getCurrentRicePlanting();
+        // Growth stage specific analytics — check all fields on this farm
+        $currentPlanting = null;
+        if ($specificField) {
+            $currentPlanting = $specificField->getCurrentRicePlanting();
+        } else {
+            foreach ($farm->fields as $field) {
+                $planting = $field->getCurrentRicePlanting();
+                if ($planting) {
+                    $currentPlanting = $planting;
+                    break;
+                }
+            }
+        }
+
         if ($currentPlanting) {
             $riceAnalytics['current_planting'] = [
                 'days_since_planting' => $currentPlanting->getDaysSincePlanting(),
                 'current_stage' => $currentPlanting->getCurrentStage()?->riceGrowthStage->name,
                 'stage_weather_suitability' => $this->assessStageWeatherSuitability($currentPlanting, $weatherLogs),
             ];
+
+            // Water Management Impact
+            $waterImpact = $this->assessWaterManagementImpact($currentPlanting);
+            if ($waterImpact) {
+                $riceAnalytics['water_management'] = $waterImpact;
+                if (isset($waterImpact['soil_moisture_status'])) {
+                    $riceAnalytics['estimated_soil_moisture'] = $waterImpact['soil_moisture_status'];
+                }
+            }
         }
 
         return array_merge($basicStats, ['rice_analytics' => $riceAnalytics]);
+    }
+
+    /**
+     * Assess impact of recent water management tasks
+     */
+    private function assessWaterManagementImpact($planting): ?array
+    {
+        if (!$planting) {
+            return null;
+        }
+
+        // Look for completed tasks in the last 5 days related to water
+        $recentTasks = Task::where('planting_id', $planting->id)
+            ->where('status', 'completed')
+            ->where('updated_at', '>=', Carbon::now()->subDays(5))
+            ->orderBy('updated_at', 'desc')
+            ->get();
+
+        if ($recentTasks->isEmpty()) {
+            return null;
+        }
+
+        $impact = [
+            'recent_activity' => null,
+            'soil_moisture_status' => null,
+            'last_action_date' => null,
+        ];
+
+        foreach ($recentTasks as $task) {
+            $name = strtolower($task->task_type . ' ' . $task->description);
+
+            // Check for water/irrigation/flooding
+            if (str_contains($name, 'water') || str_contains($name, 'irrigat') || str_contains($name, 'flood')) {
+                $impact['recent_activity'] = 'Irrigation/Flooding';
+                $impact['soil_moisture_status'] = 'Saturated'; // or High/Optimal depending on context
+                $impact['last_action_date'] = $task->updated_at;
+                break; // Found the most recent significant action
+            }
+
+            // Check for draining/drying
+            if (str_contains($name, 'drain') || str_contains($name, 'dry')) {
+                $impact['recent_activity'] = 'Draining/Drying';
+                $impact['soil_moisture_status'] = 'Dry'; // or Low
+                $impact['last_action_date'] = $task->updated_at;
+                break;
+            }
+        }
+
+        if (!$impact['recent_activity']) {
+            return null;
+        }
+
+        return $impact;
     }
 
     /**
@@ -537,7 +753,7 @@ class WeatherService
     {
         $baseTemp = 10; // Base temperature for rice (°C)
         $maxTemp = 30;  // Maximum effective temperature for rice (°C)
-        
+
         $gdd = 0;
         foreach ($weatherLogs as $log) {
             $effectiveTemp = min($log->temperature, $maxTemp);
@@ -545,7 +761,7 @@ class WeatherService
                 $gdd += ($effectiveTemp - $baseTemp);
             }
         }
-        
+
         return round($gdd, 1);
     }
 
@@ -555,7 +771,7 @@ class WeatherService
     private function calculateOptimalGrowthDays($weatherLogs): int
     {
         return $weatherLogs->filter(function ($log) {
-            return $log->temperature >= 20 && $log->temperature <= 30 
+            return $log->temperature >= 20 && $log->temperature <= 30
                 && $log->humidity >= 60 && $log->humidity <= 80;
         })->count();
     }
@@ -599,7 +815,7 @@ class WeatherService
     private function assessDroughtStressRisk($weatherLogs): string
     {
         $recentLogs = $weatherLogs->sortByDesc('recorded_at')->take(7); // Last 7 days
-        
+
         $lowHumidityDays = $recentLogs->where('humidity', '<', 50)->count();
         $highTempDays = $recentLogs->where('temperature', '>', 32)->count();
         $noRainDays = $recentLogs->whereNotIn('conditions', ['rainy', 'stormy'])->count();
@@ -625,7 +841,7 @@ class WeatherService
 
         $stageCode = $currentStage->riceGrowthStage->stage_code;
         $recentWeather = $weatherLogs->sortByDesc('recorded_at')->take(7);
-        
+
         $recommendations = [];
         $suitabilityScore = 100;
 
@@ -652,13 +868,13 @@ class WeatherService
                 // Critical stage - very sensitive to temperature and humidity
                 $hotDays = $recentWeather->where('temperature', '>', 30)->count();
                 $lowHumidityDays = $recentWeather->where('humidity', '<', 60)->count();
-                
+
                 if ($hotDays > 1) {
-                    $suitabilityScore -= 30;
+                    $suitabilityScore -= 40;
                     $recommendations[] = 'Critical: Maintain 5-10cm water depth during flowering to prevent heat stress.';
                 }
                 if ($lowHumidityDays > 2) {
-                    $suitabilityScore -= 20;
+                    $suitabilityScore -= 30;
                     $recommendations[] = 'Increase field humidity through proper water management.';
                 }
                 break;
@@ -682,7 +898,7 @@ class WeatherService
                 break;
         }
 
-        $suitability = match(true) {
+        $suitability = match (true) {
             $suitabilityScore >= 80 => 'excellent',
             $suitabilityScore >= 60 => 'good',
             $suitabilityScore >= 40 => 'moderate',
@@ -700,13 +916,13 @@ class WeatherService
     /**
      * Get rice farming weather recommendations
      */
-    public function getRiceFarmingRecommendations(Field $field): array
+    public function getRiceFarmingRecommendations(Farm $farm, ?\App\Models\Field $specificField = null): array
     {
-        $weatherAnalytics = $this->getRiceWeatherAnalytics($field, 7); // Last 7 days
-        $alerts = $this->getWeatherAlerts($field);
-        
+        $weatherAnalytics = $this->getRiceWeatherAnalytics($farm, 7, $specificField); // Last 7 days
+        $alerts = $this->getWeatherAlerts($farm);
+
         $recommendations = [];
-        
+
         // Extract recommendations from alerts
         foreach ($alerts as $alert) {
             if (isset($alert['recommendation'])) {
@@ -726,7 +942,7 @@ class WeatherService
         // Add general recommendations based on analytics
         if (isset($weatherAnalytics['rice_analytics'])) {
             $analytics = $weatherAnalytics['rice_analytics'];
-            
+
             if ($analytics['heat_stress_days'] > 2) {
                 $recommendations[] = [
                     'type' => 'general',
@@ -735,7 +951,7 @@ class WeatherService
                     'priority' => 'medium'
                 ];
             }
-            
+
             if ($analytics['weather_suitability_score'] < 60) {
                 $recommendations[] = [
                     'type' => 'general',
@@ -743,6 +959,41 @@ class WeatherService
                     'recommendation' => 'Weather conditions are suboptimal. Monitor crops closely for stress symptoms.',
                     'priority' => 'medium'
                 ];
+            }
+        }
+
+        // Add Post-Harvest Drying Advisory based on forecast
+        $coords = $farm->weather_coordinates;
+        if ($coords && isset($coords['lat'], $coords['lon'])) {
+            $forecast = $this->getForecast((float) $coords['lat'], (float) $coords['lon'], 3);
+            if ($forecast && isset($forecast['list'])) {
+                $upcomingRain = false;
+                $daysChecked = 0;
+                
+                foreach (array_slice($forecast['list'], 0, 3) as $day) {
+                    if (isset($day['pop']) && $day['pop'] > 0.4) {
+                        $upcomingRain = true;
+                    }
+                    $daysChecked++;
+                }
+
+                if ($daysChecked > 0) {
+                    if ($upcomingRain) {
+                        $recommendations[] = [
+                            'type' => 'advisory',
+                            'category' => 'post_harvest',
+                            'recommendation' => 'Rain is expected in the next 3 days. Use mechanical dryers for recently threshed palay to avoid spoilage.',
+                            'priority' => 'high'
+                        ];
+                    } else {
+                        $recommendations[] = [
+                            'type' => 'advisory',
+                            'category' => 'post_harvest',
+                            'recommendation' => 'Clear weather expected for the next 3 days. Conditions are optimal for open-air sun drying operations.',
+                            'priority' => 'low'
+                        ];
+                    }
+                }
             }
         }
 

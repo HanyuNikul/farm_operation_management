@@ -10,9 +10,13 @@ use App\Models\InventoryItem;
 use App\Models\WeatherLog;
 use App\Models\Expense;
 use App\Models\Sale;
+use App\Models\SeedPlanting;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
+use App\Models\RiceProduct;
+use App\Models\RiceOrder;
 
 class DashboardController extends Controller
 {
@@ -27,79 +31,137 @@ class DashboardController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $fields = Field::where('user_id', $user->id)->get();
-        $fieldIds = $fields->pluck('_id');
+        $data = Cache::remember("farmer_dashboard_{$user->id}", now()->addMinutes(5), function () use ($user) {
+            $fields = Field::where('user_id', $user->id)->get();
+            $fieldIds = $fields->pluck('id');
 
-        // Get plantings for user's fields
-        $plantings = Planting::whereIn('field_id', $fieldIds)->get();
-        $plantingIds = $plantings->pluck('_id');
+            // Get planting IDs for user's fields
+            $plantingIds = Planting::whereIn('field_id', $fieldIds)->pluck('id');
 
-        // Dashboard stats
-        $stats = [
-            'total_fields' => $fields->count(),
-            'active_plantings' => $plantings->where('status', '!=', 'harvested')->count(),
-            'pending_tasks' => Task::whereIn('planting_id', $plantingIds)
+            // Dashboard stats
+            $stats = [
+                'total_fields' => $fields->count(),
+                'active_plantings' => Planting::whereIn('field_id', $fieldIds)
+                    ->whereNotIn('status', [Planting::STATUS_HARVESTED, Planting::STATUS_FAILED])
+                    ->count(),
+                'active_seed_plantings' => SeedPlanting::where('user_id', $user->id)
+                    ->whereIn('status', ['sown', 'germinating', 'ready'])
+                    ->count(),
+                'ready_seed_plantings' => SeedPlanting::where('user_id', $user->id)
+                    ->where('status', 'ready')
+                    ->count(),
+                'pending_tasks' => Task::where(function ($q) use ($fieldIds, $plantingIds) {
+                        $q->whereIn('field_id', $fieldIds)
+                          ->orWhereIn('planting_id', $plantingIds);
+                    })
+                    ->where('status', Task::STATUS_PENDING)
+                    ->count(),
+                'overdue_tasks' => Task::where(function ($q) use ($fieldIds, $plantingIds) {
+                        $q->whereIn('field_id', $fieldIds)
+                          ->orWhereIn('planting_id', $plantingIds);
+                    })
+                    ->where('status', Task::STATUS_PENDING)
+                    ->where('due_date', '<', now())
+                    ->count(),
+                'low_stock_items' => InventoryItem::where('user_id', $user->id)
+                    ->whereColumn('current_stock', '<=', 'minimum_stock')
+                    ->count(),
+            ];
+
+            // Recent activities
+            $recentTasks = Task::where(function ($q) use ($fieldIds, $plantingIds) {
+                    $q->whereIn('field_id', $fieldIds)
+                      ->orWhereIn('planting_id', $plantingIds);
+                })
+                ->with(['planting.field', 'field', 'laborer'])
+                ->orderBy('created_at', 'desc')
+                ->limit(5)
+                ->get();
+
+            $upcomingTasks = Task::where(function ($q) use ($fieldIds, $plantingIds) {
+                    $q->whereIn('field_id', $fieldIds)
+                      ->orWhereIn('planting_id', $plantingIds);
+                })
                 ->where('status', Task::STATUS_PENDING)
-                ->count(),
-            'overdue_tasks' => Task::whereIn('planting_id', $plantingIds)
-                ->where('status', Task::STATUS_PENDING)
-                ->where('due_date', '<', now())
-                ->count(),
-            'low_stock_items' => InventoryItem::where('quantity', '<=', 'min_stock')->count(),
-        ];
+                ->where('due_date', '>=', now())
+                ->with(['planting.field', 'field', 'laborer'])
+                ->orderBy('due_date', 'asc')
+                ->limit(5)
+                ->get();
 
-        // Recent activities
-        $recentTasks = Task::whereIn('planting_id', $plantingIds)
-            ->with(['planting.field', 'laborer'])
-            ->orderBy('created_at', 'desc')
-            ->limit(5)
-            ->get();
+            // Efficiently fetch latest weather for the user's farms
+            $farms = \App\Models\Farm::where('user_id', $user->id)
+                ->with(['latestWeather'])
+                ->get();
 
-        $upcomingTasks = Task::whereIn('planting_id', $plantingIds)
-            ->where('status', Task::STATUS_PENDING)
-            ->where('due_date', '>=', now())
-            ->with(['planting.field', 'laborer'])
-            ->orderBy('due_date', 'asc')
-            ->limit(5)
-            ->get();
+            $weatherData = $farms->map(function ($farm) {
+                if ($farm->latestWeather) {
+                    return [
+                        'farm' => $farm,
+                        'weather' => $farm->latestWeather
+                    ];
+                }
+                return null;
+            })->filter()->values();
 
-        // Weather data for user's fields
-        $weatherData = [];
-        foreach ($fields as $field) {
-            $latestWeather = WeatherLog::where('field_id', $field->_id)
-                ->orderBy('recorded_at', 'desc')
-                ->first();
-            
-            if ($latestWeather) {
-                $weatherData[] = [
-                    'field' => $field,
-                    'weather' => $latestWeather
-                ];
-            }
-        }
+            // Monthly expenses
+            $monthlyExpenses = Expense::whereIn('planting_id', $plantingIds)
+                ->whereMonth('date', now()->month)
+                ->whereYear('date', now()->year)
+                ->sum('amount');
 
-        // Monthly expenses
-        $monthlyExpenses = Expense::whereIn('planting_id', $plantingIds)
-            ->whereMonth('date', now()->month)
-            ->whereYear('date', now()->year)
-            ->sum('amount');
-
-        // Monthly sales
-        $monthlySales = Sale::whereHas('harvest.planting.field', function($query) use ($user) {
+            // Monthly sales
+            $monthlySales = Sale::whereHas('harvest.planting.field', function ($query) use ($user) {
                 $query->where('user_id', $user->id);
             })
-            ->whereMonth('sale_date', now()->month)
-            ->whereYear('sale_date', now()->year)
-            ->sum('total_amount');
+                ->whereMonth('sale_date', now()->month)
+                ->whereYear('sale_date', now()->year)
+                ->whereYear('sale_date', now()->year)
+                ->sum('total_amount');
 
-        return response()->json([
-            'stats' => $stats,
-            'recent_tasks' => $recentTasks,
-            'upcoming_tasks' => $upcomingTasks,
-            'weather_data' => $weatherData,
-            'monthly_expenses' => $monthlyExpenses,
-            'monthly_sales' => $monthlySales,
-        ]);
+            // Marketplace Stats
+            // Calculate revenue from marketplace orders (delivered)
+            $marketplaceRevenue = RiceOrder::whereHas('riceProduct', function ($query) use ($user) {
+                $query->where('farmer_id', $user->id);
+            })->where('status', RiceOrder::STATUS_DELIVERED)->sum('total_amount');
+
+            // Calculate revenue from direct sales
+            $directSalesRevenue = Sale::where('user_id', $user->id)->sum('total_amount');
+
+            $marketplaceStats = [
+                'total_products' => RiceProduct::where('farmer_id', $user->id)->count(),
+                'active_listings' => RiceProduct::where('farmer_id', $user->id)
+                    ->where('is_available', true)
+                    ->where('quantity_available', '>', 0)
+                    ->count(),
+                'pending_orders' => RiceOrder::whereHas('riceProduct', function ($query) use ($user) {
+                    $query->where('farmer_id', $user->id);
+                })->where('status', RiceOrder::STATUS_PENDING)->count(),
+                'total_revenue' => $marketplaceRevenue + $directSalesRevenue,
+                'marketplace_revenue' => $marketplaceRevenue,
+                'direct_sales_revenue' => $directSalesRevenue,
+            ];
+
+            // Recent Marketplace Products
+            $recentProducts = RiceProduct::where('farmer_id', $user->id)
+                ->with('riceVariety')
+                ->orderBy('created_at', 'desc')
+                ->limit(5)
+                ->get();
+
+            return [
+                'stats' => $stats,
+                'recent_tasks' => $recentTasks,
+                'upcoming_tasks' => $upcomingTasks,
+                'weather_data' => $weatherData,
+                'monthly_expenses' => $monthlyExpenses,
+                'monthly_sales' => $monthlySales,
+                'marketplace_stats' => $marketplaceStats,
+                'recent_products' => $recentProducts,
+            ];
+        });
+
+        return response()->json($data);
     }
 
     /**
@@ -113,39 +175,43 @@ class DashboardController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        // Dashboard stats
-        $stats = [
-            'total_orders' => Order::where('buyer_id', $user->id)->count(),
-            'pending_orders' => Order::where('buyer_id', $user->id)
-                ->where('status', Order::STATUS_PENDING)
-                ->count(),
-            'completed_orders' => Order::where('buyer_id', $user->id)
-                ->where('status', Order::STATUS_DELIVERED)
-                ->count(),
-            'total_spent' => Order::where('buyer_id', $user->id)
-                ->where('status', Order::STATUS_DELIVERED)
-                ->sum('total_amount'),
-        ];
+        $data = Cache::remember("buyer_dashboard_{$user->id}", now()->addMinutes(10), function () use ($user) {
+            // Dashboard stats
+            $stats = [
+                'total_orders' => Order::where('buyer_id', $user->id)->count(),
+                'pending_orders' => Order::where('buyer_id', $user->id)
+                    ->where('status', Order::STATUS_PENDING)
+                    ->count(),
+                'completed_orders' => Order::where('buyer_id', $user->id)
+                    ->where('status', Order::STATUS_DELIVERED)
+                    ->count(),
+                'total_spent' => Order::where('buyer_id', $user->id)
+                    ->where('status', Order::STATUS_DELIVERED)
+                    ->sum('total_amount'),
+            ];
 
-        // Recent orders
-        $recentOrders = Order::where('buyer_id', $user->id)
-            ->with('orderItems.inventoryItem')
-            ->orderBy('created_at', 'desc')
-            ->limit(5)
-            ->get();
+            // Recent orders
+            $recentOrders = Order::where('buyer_id', $user->id)
+                ->with('orderItems.inventoryItem')
+                ->orderBy('created_at', 'desc')
+                ->limit(5)
+                ->get();
 
-        // Available products
-        $availableProducts = InventoryItem::where('category', InventoryItem::CATEGORY_PRODUCE)
-            ->where('quantity', '>', 0)
-            ->orderBy('created_at', 'desc')
-            ->limit(10)
-            ->get();
+            // Available products
+            $availableProducts = InventoryItem::where('category', InventoryItem::CATEGORY_PRODUCE)
+                ->where('current_stock', '>', 0)
+                ->orderBy('created_at', 'desc')
+                ->limit(10)
+                ->get();
 
-        return response()->json([
-            'stats' => $stats,
-            'recent_orders' => $recentOrders,
-            'available_products' => $availableProducts,
-        ]);
+            return [
+                'stats' => $stats,
+                'recent_orders' => $recentOrders,
+                'available_products' => $availableProducts,
+            ];
+        });
+
+        return response()->json($data);
     }
 
     /**
@@ -155,7 +221,7 @@ class DashboardController extends Controller
     {
         $user = $request->user();
 
-        return match($user->role) {
+        return match ($user->role) {
             'farmer' => $this->farmerDashboard($request),
             'buyer' => $this->buyerDashboard($request),
             default => response()->json(['message' => 'Invalid user role'], 400)

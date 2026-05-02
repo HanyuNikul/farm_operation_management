@@ -12,19 +12,28 @@ import Profile from '@/Pages/Profile.vue';
 // Farm Management
 import FarmerFieldsIndex from '@/Pages/Farmer/Fields/Index.vue';
 import FarmerFieldsCreate from '@/Pages/Farmer/Fields/Create.vue';
+import FarmerFieldsEdit from '@/Pages/Farmer/Fields/Edit.vue';
 import PlantingsIndex from '@/Pages/Farmer/Plantings/Index.vue';
 import PlantingsCreate from '@/Pages/Farmer/Plantings/Create.vue';
 import PlantingsShow from '@/Pages/Farmer/Plantings/Show.vue';
 import PlantingsEdit from '@/Pages/Farmer/Plantings/Edit.vue';
 import TasksIndex from '@/Pages/Farmer/Tasks/Index.vue';
 import TasksCreate from '@/Pages/Farmer/Tasks/Create.vue';
+import TasksEdit from '@/Pages/Farmer/Tasks/Edit.vue';
 import TasksShow from '@/Pages/Farmer/Tasks/Show.vue';
 import TasksCalendar from '@/Pages/Farmer/Tasks/Calendar.vue';
 import HarvestsIndex from '@/Pages/Farmer/Harvests/Index.vue';
-import HarvestsCreate from '@/Pages/Farmer/Harvests/Create.vue';
+
+// Laborer Management
+import LaborersIndex from '@/Pages/Farmer/Laborers/Index.vue';
+import LaborersCreate from '@/Pages/Farmer/Laborers/Create.vue';
+import LaborersShow from '@/Pages/Farmer/Laborers/Show.vue';
+import LaborersEdit from '@/Pages/Farmer/Laborers/Edit.vue';
+import LaborerGroupsIndex from '@/Pages/Farmer/LaborerGroups/Index.vue';
+import LaborerGroupsShow from '@/Pages/Farmer/LaborerGroups/Show.vue';
 
 // Weather
-import WeatherAnalytics from '@/Pages/Farmer/Weather/Analytics.vue';
+
 
 // Marketplace
 import Marketplace from '@/Pages/Marketplace/Index.vue';
@@ -55,11 +64,22 @@ import WeatherReports from '@/Pages/Reports/Weather.vue';
 // Financial
 import FinancialExpensesIndex from '@/Pages/Financial/Expenses/Index.vue';
 
+// Seed Plantings
+import SeedPlantingsIndex from '@/Pages/SeedPlantings/Index.vue';
+import SeedPlantingsCreate from '@/Pages/SeedPlantings/Create.vue';
+
 const routes = [
   {
     path: '/',
     name: 'home',
-    component: () => import('@/Pages/Auth/Login.vue'), // Temporary, will be handled by router guard
+    component: () => import('@/Pages/Landing.vue'),
+    meta: { requiresGuest: true }
+  },
+  {
+    path: '/verify-phone',
+    name: 'verify-phone',
+    component: () => import('@/Pages/Auth/VerifyPhone.vue'),
+    meta: { requiresGuest: true }
   },
   {
     path: '/verify-phone',
@@ -71,6 +91,18 @@ const routes = [
     path: '/login',
     name: 'login',
     component: Login,
+    meta: { requiresGuest: true }
+  },
+  {
+    path: '/forgot-password',
+    name: 'forgot-password',
+    component: () => import('@/Pages/Auth/ForgotPassword.vue'),
+    meta: { requiresGuest: true }
+  },
+  {
+    path: '/password/reset/:token',
+    name: 'password-reset',
+    component: () => import('@/Pages/Auth/ResetPassword.vue'),
     meta: { requiresGuest: true }
   },
   {
@@ -112,6 +144,12 @@ const routes = [
     meta: { requiresAuth: true, roles: ['farmer'] }
   },
   {
+    path: '/fields/:id/edit',
+    name: 'fields-edit',
+    component: FarmerFieldsEdit,
+    meta: { requiresAuth: true, roles: ['farmer'] }
+  },
+  {
     path: '/plantings',
     name: 'plantings',
     component: PlantingsIndex,
@@ -135,6 +173,32 @@ const routes = [
     component: PlantingsEdit,
     meta: { requiresAuth: true, roles: ['farmer'] }
   },
+
+  // Seed Planting Routes
+  {
+    path: '/seed-plantings',
+    name: 'seed-plantings',
+    component: SeedPlantingsIndex,
+    meta: { requiresAuth: true, roles: ['farmer'] }
+  },
+  {
+    path: '/seed-plantings/create',
+    name: 'seed-plantings-create',
+    component: SeedPlantingsCreate,
+    meta: { requiresAuth: true, roles: ['farmer'] }
+  },
+  {
+    path: '/seed-plantings/:id',
+    name: 'seed-plantings-show',
+    component: () => import('@/Pages/SeedPlantings/Show.vue'),
+    meta: { requiresAuth: true, roles: ['farmer'] }
+  },
+  {
+    path: '/seed-plantings/:id/edit',
+    name: 'seed-plantings-edit',
+    component: () => import('@/Pages/SeedPlantings/Edit.vue'),
+    meta: { requiresAuth: true, roles: ['farmer'] }
+  },
   {
     path: '/tasks',
     name: 'tasks',
@@ -145,6 +209,12 @@ const routes = [
     path: '/tasks/create',
     name: 'tasks-create',
     component: TasksCreate,
+    meta: { requiresAuth: true, roles: ['farmer'] }
+  },
+  {
+    path: '/tasks/:id/edit',
+    name: 'tasks-edit',
+    component: TasksEdit,
     meta: { requiresAuth: true, roles: ['farmer'] }
   },
   {
@@ -166,9 +236,62 @@ const routes = [
     meta: { requiresAuth: true, roles: ['farmer'] }
   },
   {
-    path: '/harvests/create',
-    name: 'harvests-create',
-    component: HarvestsCreate,
+    path: '/harvests/:id',
+    name: 'harvests-show',
+    component: () => import('@/Pages/Farmer/Harvests/Show.vue'),
+    meta: { requiresAuth: true, roles: ['farmer'] }
+  },
+  {
+    path: '/harvests/:harvest_id/processing',
+    name: 'post-harvest-pipeline',
+    component: () => import('@/Pages/Farm/PostHarvest/Index.vue'),
+    meta: { requiresAuth: true, roles: ['farmer'] }
+  },
+
+  // Laborer Routes
+  // Groups first to avoid catching by :id
+  {
+    path: '/laborers/groups',
+    name: 'laborer-groups',
+    component: LaborerGroupsIndex,
+    meta: { requiresAuth: true, roles: ['farmer'] }
+  },
+  {
+    path: '/laborers/groups/:id',
+    name: 'laborer-groups-show',
+    component: LaborerGroupsShow,
+    meta: { requiresAuth: true, roles: ['farmer'] }
+  },
+  {
+    path: '/laborers',
+    name: 'laborers',
+    component: LaborersIndex,
+    meta: { requiresAuth: true, roles: ['farmer'] }
+  },
+  {
+    path: '/laborers/create',
+    name: 'laborers-create',
+    component: LaborersCreate,
+    meta: { requiresAuth: true, roles: ['farmer'] }
+  },
+  {
+    path: '/laborers/:id',
+    name: 'laborers-show',
+    component: LaborersShow,
+    meta: { requiresAuth: true, roles: ['farmer'] }
+  },
+  {
+    path: '/laborers/:id/edit',
+    name: 'laborers-edit',
+    component: LaborersEdit,
+    meta: { requiresAuth: true, roles: ['farmer'] }
+  },
+
+  // Pest Tracker Routes
+  {
+    path: '/pest-tracker',
+    name: 'pest-tracker',
+    component: () => import('@/Pages/Farmer/PestTracker/Index.vue'),
     meta: { requiresAuth: true, roles: ['farmer'] }
   },
 
@@ -179,13 +302,14 @@ const routes = [
     component: WeatherDashboard,
     meta: { requiresAuth: true, roles: ['farmer'] }
   },
+
+  // Data Analytics Route
   {
-    path: '/weather/analytics',
-    name: 'weather-analytics',
-    component: WeatherAnalytics,
+    path: '/analytics',
+    name: 'data-analytics',
+    component: () => import('@/Pages/Analytics/DataAnalysis.vue'),
     meta: { requiresAuth: true, roles: ['farmer'] }
   },
-
 
   // Reports Routes
   {
@@ -203,9 +327,21 @@ const routes = [
     meta: { requiresAuth: true, roles: ['farmer'] }
   },
   {
+    path: '/inventory/create',
+    name: 'inventory-create',
+    component: () => import('@/Pages/Inventory/Create.vue'),
+    meta: { requiresAuth: true, roles: ['farmer'] }
+  },
+  {
     path: '/inventory/:id',
     name: 'inventory-detail',
     component: InventoryDetail,
+    meta: { requiresAuth: true, roles: ['farmer'] }
+  },
+  {
+    path: '/inventory/:id/edit',
+    name: 'inventory-edit',
+    component: () => import('@/Pages/Inventory/Edit.vue'),
     meta: { requiresAuth: true, roles: ['farmer'] }
   },
 
@@ -230,13 +366,51 @@ const routes = [
     component: () => import('@/Pages/Buyer/ProductDetail.vue'),
     meta: { requiresAuth: true, roles: ['buyer'] }
   },
+  {
+    path: '/buyer/orders',
+    name: 'buyer-orders',
+    component: () => import('@/Pages/Buyer/Orders/Index.vue'),
+    meta: { requiresAuth: true, roles: ['buyer'] }
+  },
+  {
+    path: '/favorites',
+    name: 'favorites',
+    component: () => import('@/Pages/Buyer/Favorites.vue'),
+    meta: { requiresAuth: true, roles: ['buyer'] }
+  },
+  {
+    path: '/buyer/orders/:id',
+    name: 'buyer-order-detail',
+    component: () => import('@/Pages/Marketplace/Orders/Show.vue'),
+    meta: { requiresAuth: true, roles: ['buyer'] }
+  },
+  {
+    path: '/buyer/cart',
+    name: 'buyer-cart',
+    component: () => import('@/Pages/Buyer/Cart.vue'),
+    meta: { requiresAuth: true, roles: ['buyer'] }
+  },
 
-  // Marketplace Routes
+  // Farmer Order Routes
+  {
+    path: '/farmer/orders',
+    name: 'farmer-orders',
+    component: () => import('@/Pages/Farmer/Orders/Index.vue'),
+    meta: { requiresAuth: true, roles: ['farmer'] }
+  },
+  {
+    path: '/farmer/orders/:id',
+    name: 'farmer-order-detail',
+    component: () => import('@/Pages/Marketplace/Orders/Show.vue'),
+    meta: { requiresAuth: true, roles: ['farmer'] }
+  },
+
+  // Marketplace Routes (guest browsing allowed)
   {
     path: '/marketplace',
     name: 'marketplace',
     component: Marketplace,
-    meta: { requiresAuth: true }
+    meta: { allowGuest: true }
   },
   {
     path: '/marketplace/product/create',
@@ -257,6 +431,12 @@ const routes = [
     meta: { requiresAuth: true, roles: ['farmer'] }
   },
   {
+    path: '/marketplace/my-products/:id',
+    name: 'marketplace-product-show',
+    component: () => import('@/Pages/Marketplace/Product/Show.vue'),
+    meta: { requiresAuth: true, roles: ['farmer'] }
+  },
+  {
     path: '/marketplace/orders',
     name: 'marketplace-orders',
     component: OrdersList,
@@ -272,7 +452,13 @@ const routes = [
     path: '/marketplace/products/:id',
     name: 'product-detail',
     component: ProductDetail,
-    meta: { requiresAuth: true }
+    meta: { allowGuest: true }
+  },
+  {
+    path: '/checkout',
+    name: 'checkout',
+    component: () => import('@/Pages/Marketplace/Checkout.vue'),
+    meta: { requiresAuth: true, roles: ['buyer'] }
   },
   {
     path: '/checkout',
@@ -304,6 +490,12 @@ const routes = [
     path: '/financial/expenses',
     name: 'financial-expenses',
     component: FinancialExpensesIndex,
+    meta: { requiresAuth: true, roles: ['farmer'] }
+  },
+  {
+    path: '/sales',
+    name: 'sales',
+    component: () => import('@/Pages/Farmer/Sales/Index.vue'),
     meta: { requiresAuth: true, roles: ['farmer'] }
   },
 
@@ -402,10 +594,11 @@ const routes = [
   },
   {
     path: '/reports/weather',
+    alias: '/weather/analytics',
     name: 'weather-reports',
     component: WeatherReports,
     meta: { requiresAuth: true, roles: ['farmer'] }
-  },
+  }
 ];
 
 export default routes;
@@ -416,15 +609,11 @@ export const setupRouterGuards = (router) => {
     try {
       const authStore = useAuthStore();
 
-      console.log(`Router: Navigating from ${from.path} to ${to.path}`);
-
       // Handle root path redirect
       if (to.path === '/') {
         if (authStore.isAuthenticated) {
-          console.log('Router: Redirecting authenticated user to dashboard');
           next('/dashboard');
         } else {
-          console.log('Router: Redirecting unauthenticated user to login');
           next('/login');
         }
         return;
@@ -432,16 +621,15 @@ export const setupRouterGuards = (router) => {
 
       // Check if route requires authentication
       if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-        console.log('Router: Route requires auth, redirecting to login');
-        next('/login');
-        return;
+        return next({
+          path: '/login',
+          query: { redirect: to.fullPath }
+        });
       }
 
       // Check if route requires guest (not authenticated)
       if (to.meta.requiresGuest && authStore.isAuthenticated) {
-        console.log('Router: Guest route accessed by authenticated user, redirecting to dashboard');
-        next('/dashboard');
-        return;
+        return next('/dashboard');
       }
 
       // --- START OF THE FIX ---
@@ -449,7 +637,6 @@ export const setupRouterGuards = (router) => {
       // If user is authenticated but user data is not loaded yet, wait for it
       // This is important for page reloads where the guard runs before user data is fetched
       if (authStore.isAuthenticated && !authStore.user && !authStore.loading) {
-        console.log('Router: User authenticated but data not loaded, fetching user data...');
         try {
           await authStore.fetchUser();
         } catch (error) {
@@ -460,7 +647,6 @@ export const setupRouterGuards = (router) => {
 
       // Wait for user data to finish loading if it's currently loading
       if (authStore.isAuthenticated && authStore.loading) {
-        console.log('Router: Waiting for user data to load...');
         // Wait up to 3 seconds for user data to load
         let attempts = 0;
         while (authStore.loading && attempts < 30) {
@@ -480,7 +666,6 @@ export const setupRouterGuards = (router) => {
 
       // Check if user needs onboarding but is trying to go to a normal page
       if (userHasNoFarm && !to.meta.requiresOnboarding && to.path !== '/onboarding') {
-        console.log('Router: User is a farmer with no farm, redirecting to onboarding');
         next('/onboarding');
         return;
       }
@@ -488,7 +673,6 @@ export const setupRouterGuards = (router) => {
       // Check if user is ALREADY onboarded but tries to go back to /onboarding
       // Only redirect if we have user data (to avoid redirecting when user is null on reload)
       if (to.meta.requiresOnboarding && user && !userHasNoFarm) {
-        console.log('Router: User is already onboarded, redirecting from /onboarding');
         next('/dashboard');
         return;
       }
@@ -496,7 +680,6 @@ export const setupRouterGuards = (router) => {
       // If we're on onboarding page and user data is still loading, allow navigation
       // (don't redirect away from onboarding while user data is being fetched)
       if (to.meta.requiresOnboarding && !user && authStore.isAuthenticated) {
-        console.log('Router: On onboarding page, user data still loading, allowing navigation');
         next();
         return;
       }
@@ -506,13 +689,11 @@ export const setupRouterGuards = (router) => {
       // Check role-based access
       if (to.meta.roles && authStore.user) {
         if (!to.meta.roles.includes(authStore.user.role)) {
-          console.log(`Router: User role ${authStore.user.role} not allowed for route, redirecting to dashboard`);
           next('/dashboard');
           return;
         }
       }
 
-      console.log(`Router: Navigation to ${to.path} allowed`);
       next();
     } catch (error) {
       console.error('Router guard error:', error);

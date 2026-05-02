@@ -1,30 +1,56 @@
 <template>
   <div class="min-h-screen bg-gray-50">
-    <!-- Header -->
-    <header class="bg-white shadow-sm border-b border-gray-200">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <button
-          @click="goBack"
-          class="flex items-center text-gray-600 hover:text-gray-900 mb-4"
-        >
-          <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to Products
-        </button>
-        <h1 class="text-2xl font-bold text-gray-900">{{ product.name || 'Loading...' }}</h1>
+    <div class="container mx-auto px-4 py-8">
+      <!-- Header -->
+      <div class="flex items-center justify-between mb-8">
+        <div>
+          <button
+            @click="goBack"
+            class="inline-flex items-center text-sm font-medium text-green-600 hover:text-green-800 transition-colors mb-4"
+          >
+            <svg class="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Products
+          </button>
+          <h1 class="text-3xl font-bold text-gray-800">{{ product.name || 'Loading...' }}</h1>
+          <p class="text-gray-500 mt-1">View product details and place orders</p>
+        </div>
       </div>
-    </header>
 
-    <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" v-if="!loading && product.id">
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <!-- Main Content -->
+      <div v-if="!loading && product.id">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <!-- Main Content -->
         <div class="lg:col-span-2 space-y-6">
           <!-- Product Image -->
           <div class="bg-white rounded-lg shadow p-6">
-            <div class="aspect-w-16 aspect-h-9 bg-gradient-to-br from-green-100 to-emerald-100 rounded-lg flex items-center justify-center h-96">
-              <span class="text-9xl">🌾</span>
+            <!-- Main Image -->
+            <div class="aspect-w-16 aspect-h-9 bg-gradient-to-br from-green-100 to-emerald-100 rounded-lg overflow-hidden h-96">
+              <img
+                v-if="product.images && product.images.length > 0"
+                :src="product.images[selectedImageIndex]"
+                :alt="product.name"
+                class="w-full h-full object-cover"
+              />
+              <div v-else class="w-full h-full flex items-center justify-center">
+                <span class="text-9xl">🌾</span>
+              </div>
+            </div>
+            
+            <!-- Thumbnail Gallery -->
+            <div v-if="product.images && product.images.length > 1" class="flex gap-2 mt-4 overflow-x-auto py-2">
+              <button
+                v-for="(image, index) in product.images"
+                :key="index"
+                @click="selectedImageIndex = index"
+                :class="[
+                  'flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 transition-all',
+                  selectedImageIndex === index ? 'border-green-500 ring-2 ring-green-200' : 'border-gray-200 hover:border-gray-300'
+                ]"
+              >
+                <img :src="image" :alt="`Product image ${index + 1}`" class="w-full h-full object-cover" />
+              </button>
             </div>
           </div>
 
@@ -56,10 +82,86 @@
               </div>
             </div>
           </div>
-        </div>
 
+          <!-- Customer Reviews -->
+          <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-xl font-semibold">Customer Reviews</h2>
+              <div v-if="reviewStats.total_reviews > 0" class="flex items-center gap-2">
+                <span class="text-2xl font-bold text-yellow-500">{{ reviewStats.average_rating }}</span>
+                <div class="flex">
+                  <span v-for="n in 5" :key="n" :class="n <= Math.round(reviewStats.average_rating) ? 'text-yellow-400' : 'text-gray-300'">★</span>
+                </div>
+                <span class="text-gray-500">({{ reviewStats.total_reviews }} reviews)</span>
+              </div>
+            </div>
+
+            <div v-if="loadingReviews" class="text-center py-8">
+              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+            </div>
+
+            <div v-else-if="reviews.length === 0" class="text-center py-8 text-gray-500">
+              <p>No reviews yet. Be the first to review this product!</p>
+            </div>
+
+            <div v-else class="space-y-4">
+              <div v-for="review in reviews" :key="review.id" class="border-b border-gray-100 pb-4 last:border-0">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center text-green-600 font-semibold text-sm">
+                      {{ review.buyer?.name?.charAt(0) || 'U' }}
+                    </div>
+                    <span class="font-medium">{{ review.buyer?.name || 'Anonymous' }}</span>
+                    <span v-if="review.verified_purchase" class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">Verified</span>
+                  </div>
+                  <span class="text-sm text-gray-500">{{ formatDate(review.created_at) }}</span>
+                </div>
+                <div class="flex items-center gap-1 mb-2">
+                  <span v-for="n in 5" :key="n" :class="n <= review.rating ? 'text-yellow-400' : 'text-gray-300'" class="text-sm">★</span>
+                  <span v-if="review.title" class="ml-2 font-medium text-gray-900">{{ review.title }}</span>
+                </div>
+                <p class="text-gray-700 text-sm">{{ review.review_text }}</p>
+                <div v-if="review.would_recommend" class="mt-2 text-xs text-green-600">✓ Would recommend</div>
+              </div>
+            </div>
+          </div>
+
+
+        </div>
         <!-- Sidebar -->
         <div class="lg:col-span-1 space-y-6">
+          <!-- Favorite Button -->
+          <div class="bg-white rounded-lg shadow p-4">
+            <button
+              @click="toggleFavorite"
+              :disabled="togglingFavorite"
+              class="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg transition-colors font-medium"
+              :class="isFavorited 
+                ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200' 
+                : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200'"
+            >
+              <svg 
+                v-if="togglingFavorite" 
+                class="w-5 h-5 animate-spin" 
+                fill="none" 
+                viewBox="0 0 24 24"
+              >
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <svg 
+                v-else
+                class="w-5 h-5" 
+                :fill="isFavorited ? 'currentColor' : 'none'" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              </svg>
+              {{ isFavorited ? 'Remove from Favorites' : 'Add to Favorites' }}
+            </button>
+          </div>
+
           <!-- Order Card -->
           <div class="bg-white rounded-lg shadow p-6 sticky top-4">
             <!-- Production Status -->
@@ -83,7 +185,7 @@
               <div class="text-3xl font-bold text-green-600">
                 {{ formatCurrency(product.price_per_unit) }}
               </div>
-              <div class="text-gray-600">per {{ product.unit }}</div>
+              <div class="text-gray-600">per {{ formatUnit(product.unit) }}</div>
             </div>
 
             <!-- Available From (for pre-orders) -->
@@ -96,7 +198,7 @@
             <div class="mb-4">
               <p class="text-sm text-gray-600">
                 <span v-if="product.production_status === 'available'">
-                  Stock: <span class="font-medium">{{ product.quantity_available }} {{ product.unit }}</span>
+                  Stock: <span class="font-medium">{{ product.quantity_available }} {{ formatUnit(product.unit) }}</span>
                 </span>
                 <span v-else class="font-medium">
                   Pre-order now and get notified when available
@@ -193,10 +295,11 @@
           </div>
         </div>
       </div>
-    </main>
+  
+    </div>
 
     <!-- Loading State -->
-    <div v-else-if="loading" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div v-else-if="loading" class="w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div class="animate-pulse">
         <div class="h-8 bg-gray-200 rounded w-1/4 mb-4"></div>
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -218,14 +321,29 @@
           You will be notified via SMS when the product is ready and the day before pickup.
         </p>
         
+        <div class="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+          <div class="flex items-center gap-2 text-gray-800 font-medium mb-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+              <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v6.05A2.5 2.5 0 0115.95 16H17a1 1 0 001-1v-5a1 1 0 00-.293-.707l-2-2A1 1 0 0014 7z" />
+            </svg>
+            <span>Pickup from Farm</span>
+          </div>
+          <p class="text-sm text-gray-600 ml-7">
+            Your order will be prepared for pickup at the farmer's location.
+          </p>
+        </div>
+
         <div class="mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-2">Delivery Address</label>
-          <textarea
-            v-model="orderForm.delivery_address"
-            rows="3"
+          <label class="block text-sm font-medium text-gray-700 mb-2">Preferred Pickup Date *</label>
+          <input
+            v-model="orderForm.preferred_pickup_date"
+            type="date"
+            :min="minPickupDate"
+            required
             class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-            placeholder="Enter your delivery address"
-          ></textarea>
+          />
+          <p class="text-xs text-gray-500 mt-1">Choose when you'd like to pick up your order</p>
         </div>
 
         <div class="mb-4">
@@ -239,28 +357,9 @@
           <p class="text-xs text-gray-500 mt-1">We'll notify you via SMS when your pre-order is ready</p>
         </div>
 
-        <div class="mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-2">Delivery Method</label>
-          <select
-            v-model="orderForm.delivery_method"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-          >
-            <option value="pickup">Pickup</option>
-            <option value="courier">Courier</option>
-            <option value="postal">Postal</option>
-            <option value="truck">Truck</option>
-          </select>
-        </div>
 
-        <div class="mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
-          <input
-            v-model="orderForm.payment_method"
-            type="text"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-            placeholder="e.g., Cash on Delivery, Bank Transfer"
-          />
-        </div>
+
+
 
         <div class="mb-4">
           <label class="block text-sm font-medium text-gray-700 mb-2">Notes (Optional)</label>
@@ -295,38 +394,32 @@
       <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
         <h3 class="text-xl font-bold mb-4">Place Order</h3>
         
-        <div class="mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-2">Delivery Address</label>
-          <textarea
-            v-model="orderForm.delivery_address"
-            rows="3"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-            placeholder="Enter your delivery address"
-          ></textarea>
+        <div class="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+          <div class="flex items-center gap-2 text-gray-800 font-medium mb-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+              <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v6.05A2.5 2.5 0 0115.95 16H17a1 1 0 001-1v-5a1 1 0 00-.293-.707l-2-2A1 1 0 0014 7z" />
+            </svg>
+            <span>Pickup from Farm</span>
+          </div>
+          <p class="text-sm text-gray-600 ml-7">
+            Your order will be prepared for pickup at the farmer's location.
+          </p>
         </div>
 
         <div class="mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-2">Delivery Method</label>
-          <select
-            v-model="orderForm.delivery_method"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-          >
-            <option value="pickup">Pickup</option>
-            <option value="courier">Courier</option>
-            <option value="postal">Postal</option>
-            <option value="truck">Truck</option>
-          </select>
-        </div>
-
-        <div class="mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Preferred Pickup Date *</label>
           <input
-            v-model="orderForm.payment_method"
-            type="text"
+            v-model="orderForm.preferred_pickup_date"
+            type="date"
+            :min="minPickupDate"
+            required
             class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-            placeholder="e.g., Cash on Delivery, Bank Transfer"
           />
+          <p class="text-xs text-gray-500 mt-1">Choose when you'd like to pick up your order</p>
         </div>
+
+
 
         <div class="mb-4">
           <label class="block text-sm font-medium text-gray-700 mb-2">Notes (Optional)</label>
@@ -356,13 +449,15 @@
       </div>
     </div>
   </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { riceMarketplaceAPI, authAPI } from '@/services/api'
-import { formatCurrency } from '@/utils/format'
+import { formatCurrency, formatUnit } from '@/utils/format'
+import axios from 'axios'
 
 const route = useRoute()
 const router = useRouter()
@@ -370,17 +465,59 @@ const router = useRouter()
 const loading = ref(true)
 const product = ref({})
 const quantity = ref(1)
+const selectedImageIndex = ref(0)
 const showPreOrderModal = ref(false)
 const showOrderModal = ref(false)
 const submitting = ref(false)
+
+// Reviews state
+const reviews = ref([])
+const reviewStats = ref({ average_rating: 0, total_reviews: 0 })
+const loadingReviews = ref(false)
 
 const orderForm = ref({
   delivery_address: '',
   delivery_method: 'pickup',
   payment_method: 'Cash on Delivery',
   notes: '',
-  phone: ''
+  phone: '',
+  preferred_pickup_date: '',
 })
+
+// Computed: minimum pickup date (tomorrow)
+const minPickupDate = computed(() => {
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  return tomorrow.toISOString().split('T')[0]
+})
+
+// Favorites state
+const isFavorited = ref(false)
+const togglingFavorite = ref(false)
+
+const checkFavoriteStatus = async () => {
+  try {
+    const response = await axios.get(`/api/rice-marketplace/favorites/check/${route.params.id}`)
+    isFavorited.value = response.data.is_favorited
+  } catch (error) {
+    console.warn('Could not check favorite status:', error)
+  }
+}
+
+const toggleFavorite = async () => {
+  togglingFavorite.value = true
+  try {
+    const response = await axios.post('/api/rice-marketplace/favorites/toggle', {
+      rice_product_id: Number(route.params.id)
+    })
+    isFavorited.value = response.data.is_favorited
+  } catch (error) {
+    console.error('Failed to toggle favorite:', error)
+    alert('Failed to update favorites')
+  } finally {
+    togglingFavorite.value = false
+  }
+}
 
 const loadProduct = async () => {
   loading.value = true
@@ -388,6 +525,8 @@ const loadProduct = async () => {
     const response = await riceMarketplaceAPI.getProductById(route.params.id)
     product.value = response.data.product
     quantity.value = 1
+    // Load reviews after product loads
+    loadReviews()
   } catch (error) {
     console.error('Error loading product:', error)
     alert('Failed to load product')
@@ -395,6 +534,23 @@ const loadProduct = async () => {
     loading.value = false
   }
 }
+
+const loadReviews = async () => {
+  loadingReviews.value = true
+  try {
+    const response = await axios.get(`/api/rice-marketplace/products/${route.params.id}/reviews`)
+    reviews.value = response.data.reviews?.data || response.data.reviews || []
+    reviewStats.value = {
+      average_rating: response.data.average_rating || 0,
+      total_reviews: response.data.total_reviews || 0
+    }
+  } catch (error) {
+    console.error('Failed to load reviews:', error)
+  } finally {
+    loadingReviews.value = false
+  }
+}
+
 
 const increaseQuantity = () => {
   if (product.value.production_status === 'available') {
@@ -424,20 +580,16 @@ const parseDeliveryAddress = () => {
 }
 
 const placeOrder = async (isPreOrder = false) => {
-  if (!orderForm.value.delivery_address) {
-    alert('Please fill in delivery address')
-    return
-  }
-
   submitting.value = true
   try {
     await riceMarketplaceAPI.createOrder({
       rice_product_id: product.value.id,
       quantity: quantity.value,
-      delivery_address: parseDeliveryAddress(),
-      delivery_method: orderForm.value.delivery_method,
+      delivery_address: { street: 'Pickup from farmer', city: '', state: '', country: 'Philippines' },
+      delivery_method: 'pickup',
       payment_method: orderForm.value.payment_method,
-      notes: orderForm.value.notes
+      notes: orderForm.value.notes,
+      preferred_pickup_date: orderForm.value.preferred_pickup_date,
     })
 
     if (orderForm.value.phone) {
@@ -482,6 +634,7 @@ const formatDate = (date) => {
 
 onMounted(() => {
   loadProduct()
+  checkFavoriteStatus()
 })
 </script>
 

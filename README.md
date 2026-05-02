@@ -1,61 +1,1903 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# ANIBUKID - Farm Operation Management System
 
 <p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
+  <strong>A comprehensive farm management platform for rice farmers in Bukidnon, Philippines</strong>
 </p>
 
-## About Laravel
+<p align="center">
+  <img src="https://img.shields.io/badge/Laravel-12.x-FF2D20?style=for-the-badge&logo=laravel&logoColor=white" alt="Laravel">
+  <img src="https://img.shields.io/badge/Vue.js-3.5-4FC08D?style=for-the-badge&logo=vue.js&logoColor=white" alt="Vue.js">
+  <img src="https://img.shields.io/badge/TailwindCSS-4.0-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="TailwindCSS">
+  <img src="https://img.shields.io/badge/PostgreSQL-14.0-336791?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL">
+</p>
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+---
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## 📋 Table of Contents
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+1.  [About the Project](#about-the-project)
+2.  [Project Objectives Achievement](#project-objectives-achievement)
+3.  [Features](#features)
+4.  [Tech Stack](#tech-stack)
+5.  [System Architecture](#system-architecture)
+6.  [Module Overview](#module-overview)
+7.  [Security Implementation](#security-implementation)
+8.  [Weather & Analytics Engine](#weather--analytics-engine)
+9.  [Data Analytics Methodology](#data-analytics-methodology)
+10. [Installation & Setup](#installation--setup)
+11. [API Endpoints](#api-endpoints)
+12. [Testing](#testing)
+13. [Code Quality & Audit](#code-quality--audit)
 
-## Learning Laravel
+---
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## 🌾 About the Project
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+**ANIBUKID** is a capstone project designed to digitize and optimize rice farming operations in Bukidnon, Philippines. The system integrates:
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+*   **Smart Weather Analysis:** Real-time weather monitoring with agronomic threshold-based alerts.
+*   **Lifecycle Management:** Tracks crops from planting through all growth stages to harvest.
+*   **Marketplace Integration:** Connects farmers directly with buyers for B2B rice trading.
+*   **Financial Tracking:** Comprehensive expense, labor, and revenue management.
 
-## Laravel Sponsors
+### Problem Statement
+Traditional farming relies on manual record-keeping and experience-based decisions, leading to inefficiencies and potential crop losses. ANIBUKID addresses this by providing data-driven insights and actionable recommendations.
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+---
 
-### Premium Partners
+## 🎯 Project Objectives Achievement
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+All five core project objectives have been **fully achieved** with comprehensive implementation:
 
-## Contributing
+| Objective | Description | Status |
+|-----------|-------------|--------|
+| **A** | Digital tool for planning, labor tracking, and resource management | ✅ **100%** |
+| **B** | Localized weather updates for better farm decisions | ✅ **100%** |
+| **C** | Storage and analysis of farm data for informed decision-making | ✅ **100%** |
+| **D** | Platform connecting farmers directly to buyers | ✅ **100%** |
+| **E** | Integration of operations, weather, and sales into one centralized system | ✅ **100%** |
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+### Objective A: Planning, Labor Tracking & Resource Management
 
-## Code of Conduct
+| Category | Features Implemented |
+|----------|---------------------|
+| **Planning** | GPS-based field registration, 5-stage rice lifecycle tracking, seedling nursery management, harvest recording |
+| **Labor Tracking** | Laborer profiles, task assignment, wage management (daily/piece/contract), auto-expense generation |
+| **Resource Management** | Inventory CRUD, WAC calculation, low stock alerts, expense categorization |
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+**Key Files:** [`FieldController`](app/Http/Controllers/Farm/FieldController.php), [`TaskController`](app/Http/Controllers/Labor/TaskController.php), [`InventoryItemController`](app/Http/Controllers/Inventory/InventoryItemController.php)
 
-## Security Vulnerabilities
+---
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### Objective B: Localized Weather Updates
 
-## License
+| Category | Features Implemented |
+|----------|---------------------|
+| **Data Collection** | Multi-provider architecture (Open-Meteo, ColorfulClouds, OpenWeatherMap), field-specific GPS-based weather |
+| **Decision Support** | Agronomic alerts (heat/cold stress, disease risk), GDD calculation, stage-specific weather analysis, yield impact prediction |
+| **Forecasting** | 10-day forecasts, stress event detection, irrigation recommendations |
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+**Key Files:** [`WeatherService`](app/Services/WeatherService.php), [`WeatherAnalyticsService`](app/Services/WeatherAnalyticsService.php), [`PestPredictionService`](app/Services/PestPredictionService.php)
+
+---
+
+### Objective C: Data Storage & Analysis
+
+| Category | Features Implemented |
+|----------|---------------------|
+| **Data Storage** | 35 database models covering farms, weather, labor, inventory, financial, marketplace, pest management |
+| **Analytics Engine** | 8+ module aggregation, executive summary generation, action suggestions, financial forecasting |
+| **Reporting** | Crop yield reports, financial reports, profit/loss analysis, weather impact reports |
+
+**Key Files:** [`DataAnalysisController`](app/Http/Controllers/Analytics/DataAnalysisController.php), [`FinancialService`](app/Services/FinancialService.php), [`ReportController`](app/Http/Controllers/Reports/ReportController.php)
+
+---
+
+### Objective D: Farmer-to-Buyer Marketplace
+
+| Category | Features Implemented |
+|----------|---------------------|
+| **Marketplace Core** | Guest browsing (no login required), product listings with filters, product details with reviews, buyer registration |
+| **Order Management** | Shopping cart, checkout with negotiation, order state machine (Pending → Confirmed → Ready → Delivered) |
+| **Commerce Features** | Price negotiation, favorites, order history, auto-sales integration |
+
+**Key Files:** [`RiceMarketplaceController`](app/Http/Controllers/RiceMarketplaceController.php), [`CartController`](app/Http/Controllers/MarketPlace/CartController.php), [`RiceOrderController`](app/Http/Controllers/MarketPlace/RiceOrderController.php)
+
+---
+
+### Objective E: Centralized System Integration
+
+| Integration Path | Description |
+|-----------------|-------------|
+| **Weather → Operations** | Growth stage weather analysis affects planting recommendations |
+| **Operations → Sales** | Harvests link directly to marketplace products |
+| **Labor → Financial** | Task completion auto-generates expense records |
+| **Inventory → Financial** | Stock purchases auto-create expense entries |
+| **Marketplace → Sales** | Order completion triggers unified sale records |
+
+**Unified Dashboard Components:**
+- Real-time stats for all modules
+- Role-based views (Farmer/Buyer)
+- Integrated weather widget
+- Cross-module notifications
+
+**Key Files:** [`DashboardController`](app/Http/Controllers/DashboardController.php), [`FarmerDashboard.vue`](resources/js/Pages/Dashboard/FarmerDashboard.vue)
+
+---
+
+## ✨ Features
+
+### 👨‍🌾 For Farmers
+- **Field Management:** Register and manage multiple fields with GPS coordinates.
+- **Nursery Operations:** Manage seedling batches with auto-inventory deduction for seeds.
+- **Planting Lifecycle:** Track growth stages (Seedling → Tillering → Flowering → Grain Filling → Maturity) with automated transition logic and overdue alerts.
+- **Pest Treatment Timing Guardrail:** Pesticide spray entries are enforced only during `flowering` stage and within 07:00-08:00 local time, with backend validation in `app/Http/Controllers/Farm/PestIncidentController.php` (`validateSprayRestriction`).
+- **Transplanting Behavior:** For `transplanting` planting method, seedbed nursery stage is auto-completed and lifecycle begins immediately at **Tillering** (`stage_2_tillering`) in the new planting record.
+- **Weather Alerts:** Receive actionable advice based on temperature, humidity, and rainfall thresholds.
+- **Harvest Recording:** Log yields, quality grades, and harvester shares.
+- **Inventory Management:** Track seeds, fertilizers, pesticides with Weighted Average Cost (WAC).
+- **Labor Management:** Assign tasks with Daily Rate (`wage`), Piece Rate (`piece_rate`), or Revenue Share (`share`) payments.
+- **Sales Dashboard:** Track revenue, analyze trends, and record direct sales.
+- **Profitability Analysis:** Granular Profit & Loss reports per specific planting cycle.
+- **Product Listing:** List rice products for sale in the marketplace.
+
+### 🛒 For Buyers
+- **Product Discovery:** Browse available rice products by variety, grade, and location.
+- **Order Management:** Place orders with price negotiation capability.
+- **Order Tracking:** Real-time status updates (Pending → Confirmed → Ready → Picked Up) with **automated email notifications** for every status change.
+
+---
+
+## 🛠️ Tech Stack
+
+### Backend
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| **PHP** | 8.2+ | Server-side language |
+| **Laravel** | 12.x | MVC Framework |
+| **Laravel Sanctum** | 4.2 | API Token Authentication |
+| **Guzzle HTTP** | 7.8 | External API requests (Weather) |
+| **PostgreSQL** | 14+ | Relational Database |
+| **Doctrine DBAL** | 4.3 | Database schema modifications |
+
+### Frontend
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| **Vue.js** | 3.5 | Reactive UI Framework |
+| **Vue Router** | 4.4 | SPA Routing |
+| **Pinia** | 2.2 | State Management |
+| **Tailwind CSS** | 4.0 | Utility-first CSS |
+| **Chart.js** | 4.4 | Data Visualization |
+| **Vite** | 7.3 | Build Tool & Dev Server |
+| **Axios** | 1.11 | HTTP Client |
+| **Heroicons** | 2.1 | Icon Library |
+| **Leaflet** | 1.9 | Interactive Maps (via CDN) |
+
+### External Services
+| Service | Purpose |
+|---------|---------|
+| **Open-Meteo API** | Primary (Current conditions & Historical logs) |
+| **ColorfulClouds API** | Primary Forecasts (10-day precision) |
+| **OpenWeatherMap** | Agricultural Intelligence (Pest/Disease risks) |
+| **Windy.com** | Interactive weather map embed |
+| **Brevo (SMTP)** | Email Notifications (OTP, Alerts, Reports) |
+| **OpenStreetMap** | Base map tiles for field visualization |
+---
+
+## 🗒️ Post-Harvest Processing Update (April 2026)
+
+### Fixed Pipeline Order
+- The post-harvest pipeline now enforces a **strict, fixed order**: **Threshing → Drying → Milling**.
+- Each step must be completed before the next can begin (pipeline validation in `PostHarvestService`).
+- The UI shows 3 fixed nodes with status indicators: completed, in-progress, pending, ready, or locked.
+  - `resources/js/Pages/Farm/PostHarvest/Index.vue`
+  - `resources/js/Pages/Farm/PostHarvest/ProcessForm.vue`
+  - `app/Services/PostHarvestService.php`
+  - `app/Http/Controllers/Farm/PostHarvestController.php`
+
+### Filipino Rice Terminology (Unit System)
+- Replaced the generic "bushels" unit throughout the post-harvest pipeline with proper Filipino rice terminology:
+  - **Harvest** → `bushels` (unchanged — standard measurement at harvest time)
+  - **After Threshing** → `palay` (unhusked rice grain)
+  - **After Drying** → `dried palay`
+  - **After Milling** → variety name (e.g., "Thai Jasmine", "IR64") — the final marketable product
+- Unit labels are now read-only and auto-determined by the pipeline step (no manual selection).
+  - `app/Models/PostHarvestProcess.php` — `getInputUnitLabel()`, `getOutputUnitLabel()`, `getOutputProductForm()`
+
+### Inventory Naming Convention
+- Updated `PostHarvestService::buildOutputInventoryName()`:
+  - Threshing output: `"{Variety} - Palay"`
+  - Drying output: `"{Variety} - Dried Palay"`
+  - **Milling output: `"{Variety}"` only** — the final milled product uses just the variety name with no suffix, as it represents the marketable form.
+
+### Logo & Branding
+- Changed sidebar header background from green gradient to **white** for contrast against the green logo.
+- Enlarged sidebar logo from `w-6 h-6` to `w-8 h-8`.
+- Changed login page logo backdrop from translucent green to **white with border** and enlarged to `h-10 w-10`.
+  - `resources/js/components/Navigation/Sidebar.vue`
+  - `resources/js/Pages/Auth/Login.vue`
+
+### Task Auto-Completion Exemption
+- Tasks created with `due_date` on the same day as `created_at` are now **exempt from auto-completion**.
+- This prevents post-harvest tasks (assigned today for today) from being immediately auto-completed by the `tasks:process-due` command.
+  - `app/Console/Commands/ProcessDueTasks.php`
+
+### Integrated Labor Tasks
+- Added support to instantly create labor Tasks per post-harvest process via the 'Assign Laborers' option in the `ProcessForm`.
+- Links generated `Task` IDs directly to the `PostHarvestProcess`.
+- Marketplace product creation handles quantity transformations based on final processed form.
+
+### Verification commands
+
+- `php artisan test --filter=PostHarvestProcessTest`
+- `npm run build`
+
+
+### DevOps & Quality Assurance
+| Tool | Version | Purpose |
+|------|---------|---------|
+| **Larastan** | 3.9 | Static Analysis & Type Checking |
+| **PHPUnit** | 11.5 | Unit & Feature Testing |
+| **Laravel Pint** | 1.24 | Code Style Fixer (PSR-12) |
+| **Faker** | 1.23 | Data Seeding & Testing |
+| **Mockery** | 1.6 | Test Mocking |
+| **Git** | - | Version Control |
+
+---
+
+## 🏗️ System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         FRONTEND (Vue 3 SPA)                    │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────────────────┐ │
+│  │  Pages  │  │  Stores │  │ Router  │  │  API Service Layer  │ │
+│  │  (Vue)  │  │ (Pinia) │  │         │  │      (Axios)        │ │
+│  └────┬────┘  └────┬────┘  └────┬────┘  └──────────┬──────────┘ │
+│       └────────────┴────────────┴──────────────────┘            │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │ HTTP/JSON
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    BACKEND (Laravel 12)                         │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                     API Routes                            │   │
+│  │   /api/farmer/*  (FarmerMiddleware)                      │   │
+│  │   /api/buyer/*   (BuyerMiddleware)                       │   │
+│  │   /api/marketplace/* (Public + Auth)                     │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                │                                │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐   │
+│  │  Controllers │  │   Services   │  │       Models         │   │
+│  │  (HTTP I/O)  │  │  (Business)  │  │  (Eloquent ORM)      │   │
+│  └──────────────┘  └──────────────┘  └──────────────────────┘   │
+│         │                  │                    │               │
+│         └──────────────────┴────────────────────┘               │
+│                           │                                     │
+│  ┌────────────────────────┴─────────────────────────────────┐   │
+│  │                  PostgreSQL Database                     │   │
+│  │   users, farms, fields, plantings, harvests, expenses,   │   │
+│  │   inventory_items, tasks, rice_products, rice_orders...  │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+---
+
+## 🔄 Input-Process-Output (IPO) Model
+
+```text
+       INPUTS                       PROCESS                       OUTPUTS
++-------------------+      +-------------------------+      +---------------------+
+|                   |      |                         |      |                     |
+|  👨‍🌾 Farmer Data   |----->|   Core Business Logic   |----->|  📊 Dashboards      |
+|  🛒 Buyer Orders   |      |   (Auth, Validation)    |      |  🔔 Alerts          |
+|  ☁️ Weather APIs   |      |          +              |      |  📄 Reports         |
+|  🗺️ Map Service    |----->|   🧠 Analytics Engine   |----->|  💡 Suggestions     |
+|                   |      |          +              |      |                     |
+|                   |      |   💰 Finance Engine     |      |                     |
++-------------------+      +-----------+-------------+      +---------------------+
+                                       |
+                                       v
+                             +---------------------+
+                             |                     |
+                             |  🗄️ Database Storage  |
+                             |   (Farm, Inventory, |
+                             |    Orders, Sales)   |
+                             +---------------------+
+```
+
+### Flow Description
+1.  **Input:** User data (from Farmers and Buyers) and External APIs (Weather, Maps) feed into the system.
+2.  **Process:** Data is securely authenticated and processed by the Core Business Logic. The Analytics Engine computes specialized insights (e.g., GDD, Pest Risks). All state is persisted in the Database.
+3.  **Output:** The system generates visual Dashboards, real-time Alerts, formal Reports, and Actionable Suggestions to guide decision-making.
+
+### 4. Scheduler & Background Jobs
+To ensure reliability, the system uses a robust **Task Scheduler** driven by `supervisord`.
+- **Heartbeat Mechanism:** The scheduler runs `php artisan schedule:run` **every minute** to check for pending tasks.
+- **Automated Tasks:**
+
+| Command | Schedule | Description |
+|---------|----------|-------------|
+| `orders:cancel-expired-pickups` | Every hour | Auto-cancels orders past their 3-day pickup deadline; releases reserved stock back to listing; notifies buyer and farmer via email and in-app notification |
+| `orders:send-deadline-warnings` | Daily at 8:00 AM | Sends email warning to farmers 24 hours before a buyer's pickup deadline expires |
+| `orders:auto-confirm` | (on demand) | Auto-confirms shipped orders after 7-day waiting period |
+| `inventory:check-expiry` | Daily at 8:00 AM | Checks inventory items approaching expiry and sends alerts |
+| `pre-orders:send-notifications` | Daily at 9:00 AM | Notifies buyers when pre-ordered products become available |
+| `reports:send-scheduled` | Every hour | Sends scheduled financial/crop reports to subscribed users |
+| `weather:monitor` | Every hour | Checks active fields for critical weather conditions and triggers agronomic alerts |
+| `tasks:process-due` | Daily at 10:00 AM | Auto-completes overdue tasks and generates associated labor wage/expense records |
+
+- **Redundancy:** If a task is missed due to a brief server hiccup, the scheduler retries in the next minute slot where applicable.
+
+---
+
+## 🔄️ User Flow Diagrams
+
+### 👨‍🌾 Farmer Flow
+
+```text
+┌────────────────────────────────────────────────────────┐
+│                         START                          │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │       Landing Page        │
+              │     (Welcome / Login)     │
+              └─────────────┬─────────────┘
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │   Login (Email/Phone)     │
+              └─────────────┬─────────────┘
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │    Authentication OK      │
+              │      (Farmer Role)        │
+              └─────────────┬─────────────┘
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │ First Login? → Onboarding │
+              │ • Create Farm Profile     │
+              │ • Register Fields (GPS)   │
+              │ • Set Location (Bukidnon) │
+              └─────────────┬─────────────┘
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │     Farmer Dashboard      │
+              │ • Weather Widget & Alerts │
+              │ • Active Plantings Status │
+              │ • Pending Tasks           │
+              │ • Low Stock Alerts        │
+              │ • Recent Sales & Orders   │
+              └─────────────┬─────────────┘
+                            │
+         ┌──────────────────┴──────────────────┐
+         │                                     │
+         ▼                                     ▼
+┌───────────────────────────┐    ┌───────────────────────────┐
+│      FARM OPERATIONS      │    │     MARKETPLACE SALES     │
+├───────────────────────────┤    ├───────────────────────────┤
+│ Field Management          │    │ Product Listing           │
+│ • Add/Edit Fields (GPS)   │    │ • Link to Harvest         │
+│ Planting Lifecycle        │    │ • Set Price & Grade       │
+│ • Seedling → Maturity     │    │ • Publish to Market       │
+│ Nursery Management        │    │ Order Management          │
+│ Record Post-Harvest       │    │ • Confirm/Reject Orders   │
+└─────────────┬─────────────┘    │ • Negotiate Prices        │
+              │                  │ • Prepare Orders          │
+              ▼                  │ • Complete Turnovers      │
+┌───────────────────────────┐    │ Direct Sales              │
+│     LABOR MANAGEMENT      │    │ • Record Off-Market       │
+├───────────────────────────┤    └─────────────┬─────────────┘
+│ Laborer Profiles          │                  │
+│ Task Assignment           │                  │
+│ Pay Rates (Daily/Piece)   │                  │
+│ Auto-Expense Generation   │                  │
+└─────────────┬─────────────┘                  │
+              │                                │
+              ▼                                │
+┌───────────────────────────┐                  │
+│   POST-HARVEST PROC.      │                  │
+├───────────────────────────┤                  │
+│ Threshing → Drying        │                  │
+│ → Milling                 │                  │
+│ Auto-Expense Gen          │                  │
+└─────────────┬─────────────┘                  │
+              │                                │
+              ▼                                │
+┌───────────────────────────┐                  │
+│   INVENTORY MANAGEMENT    │                  │
+├───────────────────────────┤                  │
+│ Stock Tracking            │                  │
+│ WAC Calculation           │                  │
+│ Low Stock/Expiry Alerts   │                  │
+└─────────────┬─────────────┘                  │
+              │                                │
+              └─────────────┬──────────────────┘
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │    FINANCIAL TRACKING     │
+              ├───────────────────────────┤
+              │ Expense Categories        │
+              │ Revenue Tracking          │
+              │ Profit/Loss Reports       │
+              └─────────────┬─────────────┘
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │   WEATHER & ANALYTICS     │
+              ├───────────────────────────┤
+              │ Real-Time Weather         │
+              │ Agronomic & Pest Alerts   │
+              └─────────────┬─────────────┘
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │    REPORTS & INSIGHTS     │
+              ├───────────────────────────┤
+              │ Data Analytics            │
+              │ Action Suggestions        │
+              │ Scheduled Reports         │
+              └─────────────┬─────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│                      LOGOUT / END                      │
+└────────────────────────────────────────────────────────┘
+```
+
+### 🛒 Buyer Flow
+
+```text
+┌────────────────────────────────────────────────────────┐
+│                         START                          │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │       Landing Page        │
+              │     (Welcome / Login)     │
+              └─────────────┬─────────────┘
+                            │
+            ┌───────────────┼────────────────┐
+            │               │                │
+            ▼               ▼                ▼
+  ┌──────────────────┐┌────────────┐┌──────────────────┐
+  │      Login       ││  Register  ││  Browse as Guest │
+  │  (Email/Phone)   ││Buyer Acct  │└────────┬─────────┘
+  └─────────┬────────┘└─────┬──────┘         │
+            │               │                │
+            ▼               ▼                │
+  ┌───────────────────────────┐              │
+  │ Email/SMS OTP Verification│              │
+  └─────────────┬─────────────┘              │
+                │                            │
+                ▼                            │
+  ┌───────────────────────────┐              │
+  │    Authentication OK      │              │
+  │      (Buyer Role)         │              │
+  └─────────────┬─────────────┘              │
+                │                            │
+                ▼                            │
+  ┌───────────────────────────┐              │
+  │      Buyer Dashboard      │              │
+  │ • View Order Stats        │              │
+  │ • Recent Orders           │              │
+  │ • Recommended Products    │              │
+  └─────────────┬─────────────┘              │
+                │                            │
+                ▼                            ▼
+  ┌───────────────────────────────────────────────────┐
+  │                Browse Marketplace                 │
+  │ • Filter by Variety/Grade • Search Products       │
+  │ • View Product Details    • Add to Favorites      │
+  └─────────────────────────┬─────────────────────────┘
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │       Add to Cart         │
+              │ • Select Quantity         │
+              │ • View Farmer Info        │
+              └─────────────┬─────────────┘
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │         Checkout          │
+              │ • Review Cart Items       │
+              │ • Negotiate Price (Opt)   │
+              │ • Select Pickup Date      │
+              │ • Confirm Order           │
+              └─────────────┬─────────────┘
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │  Order Placed (Pending)   │
+              │ • Await Confirmation      │
+              └─────────────┬─────────────┘
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │  [FARMER] Confirm Order   │
+              │ • Accept/Reject           │
+              │ • Set Pickup Date         │
+              └─────────────┬─────────────┘
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │      Order Confirmed      │
+              │ • Buyer Notified          │
+              └─────────────┬─────────────┘
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │  [FARMER] Prepare Order   │
+              │ • Mark "Ready for Pickup" │
+              └─────────────┬─────────────┘
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │       Buyer Pickup        │
+              │ • Arrive at Farm          │
+              │ • Complete Handover       │
+              └─────────────┬─────────────┘
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │ [FARMER] Mark as Delivered│
+              │ • Record Payment          │
+              └─────────────┬─────────────┘
+                            │
+                            ▼
+              ┌───────────────────────────┐
+              │  [BUYER] Rate & Review    │
+              │ • Leave Product Review    │
+              │ • Rate Farmer (1-5 Stars) │
+              └─────────────┬─────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│                      LOGOUT / END                      │
+└────────────────────────────────────────────────────────┘
+```
+
+**Description:**
+These comprehensive User Flow Diagrams illustrate the complete start-to-finish journeys for the main user types in the ANIBUKID system:
+
+**Authentication & Onboarding (Both Users):**
+- Users begin at the landing page and can login, register, or browse as guests.
+- Registration is currently for Buyer accounts and requires email or SMS OTP verification.
+- **Secure Verification Flow:**
+  - Verification codes expire after **30 minutes** to prevent brute-force or stale code usage.
+  - Unverified users attempting to login are **automatically redirected** to the verification page with credentials pre-filled.
+  - Public `verify` and `resend` endpoints ensure users are never locked out of their accounts.
+
+**Farmer Journey:**
+- **Onboarding:** First-time farmers complete onboarding to create farm profiles and register fields with GPS coordinates.
+- **Farm Operations:** Manage fields, track planting lifecycle through 5 growth stages, and record harvests with quality grading.
+- **Labor Management:** Assign tasks to laborers with multiple payment types (daily, piece, contract) with auto-expense generation.
+- **Post-Harvest & Inventory:** Complete fixed-pipeline validations (Threshing → Drying → Milling), track seeds, fertilizers, pesticides with WAC calculation, low stock alerts, and expiry tracking.
+- **Marketplace Sales:** List products linked to harvests, manage incoming orders, handle price negotiations, and process fulfillment.
+- **Financial Tracking:** Automated expense generation, revenue tracking, and profit/loss analysis.
+- **Weather & Analytics:** Real-time weather data, agronomic alerts, pest predictions, and actionable insights.
+
+**Buyer Journey:**
+- **Marketplace:** Browse marketplace with filters, add products to cart, and optionally negotiate prices.
+- **Ordering:** Place orders with pickup scheduling and track order status through confirmation → ready → delivered.
+- **Completion:** Complete transactions with payment recording and leave product reviews.
+
+
+---
+
+## � System Context Diagram
+
+```text
+                                     +-------------+
+                                     | Weather API |
+                                     +-------------+
+                                        ^       |
+                           Request Data |       | Weather Data
+                                        |       v
+                    +-----------------------------------------+
+                    |                                         |
+   Manage Laborers  |                                         |  Order Products
+   Crop Details     |       Farm Operations Management        |
+     +--------+     |                 System                  |     +-------+
+     |        |---->|                                         |<----|       |
+     | Farmer |     |                                         |     | Buyer |
+     |        |<----|                                         |---->|       |
+     +--------+     |                                         |     +-------+
+   Sales Reports    |                                         |  Track Order
+   Laborer List     +-----------------------------------------+
+                                         |
+                                         | Activity Schedule
+                                         | Payroll
+                                         v
+                                    +---------+
+                                    | Laborer |
+                                    +---------+
+```
+
+**Description:**
+The System Context Diagram defines the **Farm Operations Management System** as the central entity and illustrates its interactions with external actors:
+- **Farmer (Primary User):** Inputs farm data (labor, crops) and receives actionable reports (Sales, Weather).
+- **Buyer (Secondary User):** Interacts with the marketplace to order products and track status.
+- **Laborer (External Recipient):** Receives outputs such as activity schedules and payroll (managed by the Farmer).
+- **Weather API (External System):** Provides real-time weather data which the system analyzes to generate agronomic alerts.
+
+---
+
+## 🏗️ Level 0 DFD (Fundamental System Diagram)
+
+```text
+                                  +-------------+
+                                  | Weather API |
+                                  +-------------+
+                                         ^
+                                         | 2.1 Weather Data
+                                         v
++--------+  1.1 Farm Data        +---------------+          2.2 Alerts   +--------+
+|        |---------------------->|      2.0      |---------------------->|        |
+| Farmer |  1.2 Scheduling       |    Monitor    |                       | Farmer |
+|        |<----------------------|    Weather    |---------------------->|        |
++---+----+  1.3 Pay Slips        +-------+-------+      2.3 Forecasts    +---+----+
+    |                                    |                                   ^
+    |                                    |                                   |
+    |                                    v                                   |
+    |                            [D2] Weather Logs                           |
+    |                                                                        |
+    |                                                                        |
+    |    +---------------+                                  +---------------+|
+    +--->|      1.0      |          1.4 Crop Status         |      4.0      ||
+    |    |    Manage     |--------------------------------->|    Generate   ||
+    +--->|  Operations   |------------------+               |    Reports    ||
+    |    +-------+-------+   1.5 Expenses   |               +-------+-------+|
+    |            |                          |                       ^        |
+    |            v                          |                       |        |
+    |     [D1] Farm DB (Fields/Inventory/Labor) |                       |        |
+    |                                       |                       |        |
+    |                                       v                       |        |
+    v                       [D4] Financial DB (Sales/Expenses) <----+        |
++---------+                                 ^                                |
+| Laborer |                                 |                                |
++---------+                                 | 3.4 Transaction Data           |
+                                            |                                |
+                                   +--------+--------+                       |
+         3.1 Product Listing       |       3.0       |      4.1 Reports      |
+    +----------------------------->|     Manage      |-----------------------+
+    |                              |   Marketplace   |
++---+----+                         +--------+--------+
+|        |                                  |
+| Farmer |                                  v
+|        |                   [D3] Marketplace DB (Orders/Products)
++--------+                                  ^
+                                            |
+                                            |
++-------+        3.2 Place Order            |
+|       |-----------------------------------+
+| Buyer |
+|       |<----------------------------------+
++-------+        3.3 Order Status
+```
+
+**Description:**
+The Level 0 DFD explodes the system into four major functional processes:
+1.  **1.0 Manage Operations:** Handles core farming activities, labor scheduling, crop tracking, and post-harvest inventory logging. Interacts with the `Farm DB`.
+2.  **2.0 Monitor Weather:** Fetches external weather data, stores it in `Weather Logs`, and provides alerts to farmers.
+3.  **3.0 Manage Marketplace:** Facilitates B2B transactions between Farmers and Buyers, handling product listings, order states, and shrinking reserved inventory. Stores data in `Marketplace DB`.
+4.  **4.0 Generate Reports:** Aggregates financial (Sales, Expenses) and operational data to produce actionable insights and profitability metrics for the Farmer.
+
+---
+
+## 👤 Farmer Use Case Diagram
+
+```text
+                        +---------------------------+
+                        |   Farm Operations Mgmt    |
+                        |                           |
+        +-------------->|      Manage Plantings     | - - - +
+        |               |                           |       | <<include>>
+        |               +---------------------------+       v
+        |               |                           |    ( Update Growth )
+        +-------------->|     Manage Inventory      |    (     Stage     )
+        |               |                           |
+        |               +---------------------------+       <<extend>>
+        |               |                           |    ( Track Shrinkage )
+        |               |   Process Post-Harvest    | - - - - - - +
+        |               |                           |             v
+        +-------------->|                           |       ( Update Stock )
+        |               +---------------------------+
+        |               |                           |
+        +-------------->|      Manage Laborers      |
+        |               |                           |
+        |               +---------------------------+
+        |               |                           |       <<include>>
+   +--------+           |      Record Harvest       | - - - - - - > ( Calculate Yield )
+   | Farmer |---------->|                           |
+   +--------+           +---------------------------+
+        |               |                           |
+        +-------------->|     Process Orders        | < - - - - - - ( Negotiate Price )
+        |               |                           |   <<extend>>
+        |               +---------------------------+
+        |               |                           |       <<include>>
+        |               |       Generate Sale       | - - - - - - > ( Record Revenue )
+        |               |                           |
+        |               +---------------------------+
+        |               |                           |
+        +-------------->|      View Analytics       |
+        |               |                           |
+        |               +---------------------------+
+        |               |                           |
+        +-------------->|    Generate Reports       |
+                        |                           |
+                        +---------------------------+
+```
+
+---
+
+## 🛒 Buyer Use Case Diagram
+
+```text
+                        +---------------------------+
+                        |   Farm Operations Mgmt    |
+                        |      (Marketplace)        |
+        +-------------->|      Manage Profile       |
+        |               |                           |
+        |               +---------------------------+
+        |               |                           |
+        +-------------->|     Browse Products       | - - - +
+        |               |                           |       | <<extend>>
+        |               +---------------------------+       v
+        |               |                           |    (  Filter by  )
+        |               |   Manage Shopping Cart    |    (   Location  )
+        |               |                           |
+        |               +---------------------------+
+        |               |                           |       <<extend>>
+   +-------+            |       Place Order         | - - - - - - > ( Negotiate Price )
+   | Buyer |----------->|                           |
+   +-------+            +-------------+-------------+
+        |               |             |             |
+        |               |             + - - - - - - - - - - > ( Process Payment )
+        +-------------->|             |       <<include>>
+        |               |    Track/Update Order     | - - - +
+        |               |                           |       | <<extend>>
+        |               +---------------------------+       v
+        |               |                           |    ( Confirm Pickup )
+        +-------------->|    View Order History     |    ( Cancel Order   )
+                        |                           |
+                        +---------------------------+
+```
+
+
+
+
+---
+
+## �📦 Module Overview
+
+### 1. Farm & Field Management
+- **Models:** `Farm`, `Field`, `Planting`, `PlantingStage`, `PostHarvestProcess`
+- **Controllers:** `FarmController`, `FieldController`, `PlantingController`, `PostHarvestController`
+- **Features:**
+  - GPS-based field registration, area calculation, crop rotation tracking.
+  - **Post-Harvest Processing Pipeline:** Track the transformation of raw harvests (e.g., Palay) through Threshing, Drying, and Milling into marketable products (e.g., Milled Rice), complete with weight loss calculations and automatic labor/service fee expense generation.
+
+### 2. Weather Analytics
+- **Services:** `WeatherService`, `WeatherAnalyticsService`
+- **Model:** `WeatherLog`
+- **Features:**
+  - Real-time weather fetching from Open-Meteo API
+  - Growing Degree Days (GDD) calculation (Base: 10°C, Max: 30°C)
+  - Agronomic threshold alerts (Heat Stress, Cold Stress, Drought, etc.)
+  - Yield prediction using multi-factor analysis
+  - **Data Accuracy & Configuration:**
+    - **Primary Provider:** ColorfulClouds (Caiyun) for hyper-local, minute-by-minute precipitation forecasts.
+    - **Backup Provider:** Open-Meteo, specifically configured to use the **NOAA GFS (Global Forecast System)** model for superior accuracy in the Bukidnon region (replacing the default model which overestimated temperatures).
+    - **Smart Aggregation:** Daily summaries prioritize severe weather conditions (Storm > Rain > Cloudy) to ensure users don't miss critical alerts even if the day is mostly cloudy.
+    - **Hourly Forecast:**
+      - **Data Source:** Open-Meteo (GFS Model)
+      - **Metrics:** Temperature, Weather Condition, and Rain Probability (%) for every hour of the 7-day forecast.
+      - **Smart Logic:** If the precipitation probability exceeds 50%, the condition is explicitly forced to **"Rainy"** (overriding "Cloudy") to clearly communicate risk to the farmer.
+      - **UI:** Accessible via a "View Hourly" modal for each day; fully responsive layout that adapts to mobile screens.
+    - **Rice Dashboard:** A specialized view providing specific agronomic insights such as accumulating GDD, stress days, and stage-specific weather suitability.
+
+### 3. Intelligent Data Analytics
+- **Controllers:** `DataAnalysisController`, `RiceFarmingAnalyticsController`
+- **Features:**
+  - **Comprehensive Dashboard:** Aggregates metrics from 8+ modules (Weather, Sales, Expenses, Fields, Nursery, Inventory, Pests, Labor).
+  - **Intelligent Action Suggestions:** AI-driven recommendations based on data patterns (e.g., "Restock seeds" when low, "Apply treatment" when pests detected).
+  - **Visualizations:** Interactive charts for revenue vs expenses, task distribution, and labor productivity.
+  - **Trend Analysis:** Tracks historical performance and identifies anomalies.
+
+#### 🧠 AI Inference Engine (Rule-Based)
+The system uses a deterministic expert system to generate narrative insights without external API dependencies.
+
+**Inference Logic (Executive Summary):**
+
+| Category | Condition | Generated Narrative | Tone |
+|----------|-----------|---------------------|------|
+| **Financial** | Net Profit > 0 | "The farm is currently profitable with a net income of ₱[amount]." | Positive |
+| | Expenses > 0 & Revenue = 0 | "The farm is in an investment phase with significant operational costs (₱[amount]) and no revenue yet..." | Neutral |
+| | Net Profit < 0 | "The farm is operating at a deficit of ₱[amount]." | Concern |
+| **Operations** | Overdue Tasks > 5 | "Operational bottlenecks are detected with [count] overdue tasks..." | Concern |
+| | Completion Rate > 85% | "Operations are running smoothly with a high task completion rate of [rate]%." | Positive |
+| | Completion Rate < 50% | "Labor efficiency requires attention as only [rate]% of assigned tasks are completed." | Caution |
+| **Risks** | Active Pests > 0 | "Immediate attention is required for [count] active pest incidents..." | Concern |
+| | Low Stock Items > 0 | "Supply chain risk is elevated with [count] items below minimum stock levels." | Neutral |
+
+**Action Suggestions Logic:**
+
+The system automatically generates prioritized suggestions based on specific triggers:
+
+1.  **Low Inventory (`High Priority`)**
+    *   *Trigger:* Current stock ≤ Minimum stock
+    *   *Suggestion:* "Restock [Item] - only [Current] [Unit] remaining (below minimum of [Min])"
+
+2.  **Overdue Tasks (`High/Medium Priority`)**
+    *   *Trigger:* Task due date < Now AND status != completed
+    *   *Suggestion:* "Complete overdue [Type] task for [Field] - [Days] days late"
+    *   *Priority logic:* High if > 3 days overdue, otherwise Medium
+
+3.  **Active Pest Incidents (`High/Medium Priority`)**
+    *   *Trigger:* Active pest incident in planting
+    *   *Suggestion:* "Apply treatment for [Pest] in [Field] - severity: [Severity]"
+    *   *Priority logic:* High if severity is Critical/High
+
+4.  **Low Inventory Alert (`High Priority`)**
+    *   *Trigger:* Item current stock ≤ minimum threshold OR low stock count > 0 from DataAnalysisController
+    *   *Suggestion:* "[Count] item(s) below minimum stock level — restock needed"
+
+5.  **Expiring Inventory Alert (`High Priority`)**
+    *   *Trigger:* Item expiry date is within 30 days
+    *   *Suggestion:* "[Count] item(s) expiring within 30 days — use or dispose"
+
+6.  **Pending Sales Orders (`High Priority`)**
+    *   *Trigger:* Marketplace order with status 'pending'
+    *   *Suggestion:* "Fulfill [Count] pending marketplace orders"
+
+7.  **Harvest Readiness (`High Priority`)**
+    *   *Trigger:* Planting stage is Maturity, Ripening, or Ready for Harvest
+    *   *Suggestion:* "Schedule harvesting for [Field] - crop at [Stage] stage"
+
+8.  **Weather Alerts (`Medium Priority`)**
+    *   *Trigger (Rain):* Condition contains "rain" or "storm" -> "Delay pesticide/fertilizer application..."
+    *   *Trigger (Heat):* Temperature > 35°C -> "High temperature alert - irrigate crops early morning or evening"
+
+7.  **Nursery Operations (`Medium Priority`)**
+    *   *Trigger:* Seedling batch status is 'ready'
+    *   *Suggestion:* "Transplant [Variety] seedlings - [Count] batches ready"
+
+8.  **Pickup Deadline Expiring (`High Priority`)**
+    *   *Trigger:* Order status is `ready_for_pickup` AND pickup deadline is within 24 hours
+    *   *Suggestion:* "Urgent: [Count] order(s) have pickup deadline expiring in 24 hours"
+    *   *Research basis:* Based on industry standards (Target, Walmart use 1-day for fresh produce; 3-day policy for non-highly-perishable rice)
+
+**Executive Summary Additions:**
+- **Expired Pickup Orders:** If any orders were auto-cancelled this week due to expired pickup deadlines, this is included in the executive summary as a warning.
+
+**Examples:**
+> "The farm is currently profitable with a net income of ₱50,000. Operations are running smoothly with a high task completion rate of 92%."
+
+> "The farm is operating at a deficit of ₱12,000. Operational bottlenecks are detected with 8 overdue tasks affecting overall efficiency. Immediate attention is required for 2 active pest incidents."
+
+#### 📊 Advanced Analytics Features
+- **Interactive Field Map (GIS):** Visualizes field status using geocoordinates. Color-coded markers indicate active fields (Green), idle lands (Gray), and pest risks (Red).
+- **Pest & Disease Prediction:** Uses 7-day weather forecasts to predict risks for specific threats:
+  - *Rice Blast* (High Humidity + Rain)
+  - *Stem Borer* (High Temp)
+  - *Brown Plant Hopper* (Warm + Humid)
+  - **Growth-Stage Filtering:** Predictions are filtered per-field based on the current crop growth stage (Vegetative 0-45d / Reproductive 46-75d / Ripening 76+d). Pests not relevant to the current stage are automatically suppressed. Stage-specific context notes (e.g., "Causes deadheart at vegetative stage") are appended to risk descriptions.
+- **Pest Tracker Analytics:** Dedicated analytics panel on the Pest Tracker page with:
+  - Pest type distribution bars (insect, disease, weed, rodent)
+  - Severity breakdown donut chart (low, medium, high, critical)
+  - 12-month incident trend bar chart
+  - Treatment cost summary (total, average per incident, most expensive pest)
+  - Top 5 recurring pests ranked list
+  - Average incident resolution time
+  - All charts built with pure CSS/SVG (no additional dependencies)
+- **Enriched Dashboard Panels:** 
+  - **Pest Panel:** Displays a richer pest card with type breakdown bars, treatment cost, active incident count, and average resolution days.
+  - **Inventory Panel:** Shows real-time total stock value, low-stock/expiry warning badges, dynamic category breakdown mini-bars (seeds, fertilizer, etc.), and 90-day historical usage trends. Forecasts show crop variety and growth stage per field.
+- **Resource & Cost Efficiency:** Benchmarks water/fertilizer usage against yield ($/kg, $/ha) to score farm performance.
+- **Financial Forecasting:** Projects cash flow for the next 6 months by analyzing active plantings (expected yield × market price) and historical expense patterns.
+
+
+### 4. Inventory Management
+- **Model:** `InventoryItem`, `InventoryTransaction`
+- **Controller:** `InventoryItemController`
+- **Features:**
+  - **Weighted Average Cost (WAC):** Auto-recalculates unit price on restock
+  - Low stock alerts and expiry tracking
+  - Automatic expense creation on stock purchase
+  - **Historical Usage Tracking:** Monitors consumption and restock patterns over time (integrated into Analytics Dashboard)
+
+### 5. Labor & Tasks
+- **Models:** `Task`, `Laborer`, `LaborerGroup`, `LaborWage`
+- **Controller:** `TaskController`
+- **Features:**
+  - Polymorphic payment types: `wage` (daily), `piece_rate`, `share`
+  - Auto-expense generation on task completion
+  - Laborer group assignment
+
+### 6. Harvest & Sales
+- **Models:** `Harvest`, `Sale`
+- **Controller:** `HarvestController`, `SaleController`
+- **Features:**
+  - Yield recording, quality grading, harvester share calculation.
+  - **Marketplace Integration:** Auto-creation of sales records upon order completion.
+  - **Sales Tracking:** Unified view of marketplace and off-platform sales.
+
+### 7. Marketplace
+- **Models:** `RiceProduct`, `RiceOrder`, `CartItem`, `Favorite`, `ProductReview`, `PriceNegotiation`
+- **Controllers:** `RiceProductController`, `RiceOrderController`, `CartController`
+- **Features:**
+  - **Guest Browsing:** Unauthenticated users can browse products and view details; login required for cart/favorites/orders
+  - Product listing with quality grades and certifications
+  - Price negotiation flow
+  - Order state machine (Pending → Confirmed → Ready → Picked Up)
+  - Pessimistic locking to prevent overselling
+
+#### 🕐 Auto-Cancel Expired Pickups (3-Day Rule)
+When a farmer marks an order **"Ready for Pickup"**, a **3-day pickup deadline** is automatically set on the order (`pickup_deadline = now() + 3 days`). If the buyer does not pick up the order within this window:
+
+1. **Stock Released:** The reserved quantity is automatically restored to the farmer's product listing (`RiceProduct::releaseQuantity()`).
+2. **Order Cancelled:** The order status changes to `cancelled`.
+3. **Farmer Notified:** In-app notification and email alert are sent informing the farmer that the order was auto-cancelled and stock has been restored.
+4. **Buyer Notified:** In-app notification and email alert are sent informing the buyer their order was cancelled due to an expired pickup deadline.
+
+| Detail | Value |
+|--------|-------|
+| **Trigger** | Order status is `ready_for_pickup` and `pickup_deadline` is in the past |
+| **Pickup Window** | 3 days from the time farmer marks "Ready for Pickup" |
+| **Check Frequency** | Every hour (via `orders:cancel-expired-pickups` artisan command) |
+| **Warning** | Farmer receives a 24-hour advance email warning via `orders:send-deadline-warnings` (runs daily at 8:00 AM) |
+| **Key Files** | [`AutoCancelExpiredPickups.php`](app/Console/Commands/AutoCancelExpiredPickups.php), [`SendPickupDeadlineWarnings.php`](app/Console/Commands/SendPickupDeadlineWarnings.php), [`RiceOrder.php`](app/Models/RiceOrder.php) |
+
+### 8. Financial Reporting
+- **Models:** `Expense`, `Sale`
+- **Services:** `FinancialService`
+- **Features:** 
+  - Income/expense tracking, profit/loss reports, crop profitability analysis.
+  - **Automated Expense Sync:** Completing tasks with piece-rates or logging pest incidents with treatment costs automatically generates connected Expense records.
+  - **PDF/CSV Export:** Generate professional reports for records and analysis.
+  - **Scheduled Reports:** Automated email summaries (Financial, Crop Yield).
+
+---
+
+## 🔐 Security Implementation
+
+### Authentication
+| Method | Implementation |
+|--------|----------------|
+| Token-based API Auth | **Laravel Sanctum** |
+| Password Hashing | **Bcrypt/Argon2** (via `Hash::make`) |
+| Verification Enforcement | **Strict Login Gate** (Email must be verified) |
+| Two-Factor Verification | Email OTP |
+
+### Authorization (RBAC)
+```
+┌────────────────────────────────────────────────────┐
+│                   API Request                       │
+│                        │                           │
+│            ┌───────────┴───────────┐               │
+│            ▼                       ▼               │
+│   ┌────────────────┐      ┌────────────────┐       │
+│   │ FarmerMiddleware│      │ BuyerMiddleware │       │
+│   │ (isFarmer())   │      │ (canBuy())     │       │
+│   └───────┬────────┘      └───────┬────────┘       │
+│           │                        │               │
+│     ┌─────┴─────┐           ┌──────┴─────┐         │
+│     │  ALLOW    │           │   ALLOW    │         │
+│     │  (200)    │           │   (200)    │         │
+│     └───────────┘           └────────────┘         │
+│                                                    │
+│           │ Unauthorized                           │
+│           ▼                                        │
+│   ┌────────────────┐                               │
+│   │  403 Forbidden │                               │
+│   └────────────────┘                               │
+└────────────────────────────────────────────────────┘
+```
+
+### Data Integrity
+- **Input Validation:** Strict `FormRequest` classes for all endpoints.
+- **SQL Injection Prevention:** Eloquent ORM with parameterized queries.
+- **Transaction Safety:** `DB::transaction()` with `lockForUpdate()` for critical operations.
+
+---
+
+## ⚡ Caching Strategy
+
+The system implements **Laravel Cache** to optimize performance and reduce database load on frequently accessed data.
+
+### Cache Implementation
+
+| Module | Cache Key Pattern | TTL | Description |
+|--------|-------------------|-----|-------------|
+| **Farmer Dashboard** | `farmer_dashboard_{user_id}` | 5 min | Stats, tasks, weather, marketplace data |
+| **Buyer Dashboard** | `buyer_dashboard_{user_id}` | 10 min | Order stats, recent orders, products |
+| **Marketplace** | `marketplace_stats` | 60 min | Product listings statistics and availability |
+| **Farming Analytics** | `farming_analytics_{user_id}_{period}_{farmVersion}_{fieldsVersion}` | 30 min | Yield analytics, financial trends (version-tagged for auto-invalidation) |
+| **Weather Data** | `weather_current_{lat}_{lon}` | 30 min | Shared regional weather cache (deduplicated) |
+| **Weather Forecast** | `weather_forecast_{lat}_{lon}` | 30 min | 5-14 day forecast data (Open-Meteo & ColorfulClouds) |
+
+### Cache Invalidation
+Caches are automatically invalidated when:
+- User creates/updates a planting, harvest, or task
+- Inventory stock changes
+- Orders are placed or status changes
+- Weather data is refreshed from API
+
+### Configuration
+```php
+// Default cache driver (configured in .env)
+CACHE_DRIVER=file  // Options: file, redis, memcached, database
+```
+
+---
+
+## 🌤️ Weather & Analytics Engine
+
+### Data Source Architecture (Hybrid Approach)
+The system leverages a multi-provider strategy to balance accuracy and coverage:
+
+| Provider | Max Forecast | Role | Usage |
+|----------|--------------|------|-------|
+| **Open-Meteo** | 14 days | **Current Weather** | Real-time conditions, historical logging, and forecast fallback. |
+| **ColorfulClouds** | 10 days | **Main Forecasts** | Primary source for extended forecasts, preferred for its range and accuracy. |
+| **OpenWeatherMap** | 5 days | **Agri-Insights** | Specialized data for crop protection, alerts, and detailed agricultural metrics. |
+
+#### Forecast Request Flow
+1. Client requests forecast (up to **14 days** supported)
+2. `WeatherController` routes to `ColorfulCloudsWeatherService` (primary)
+3. If ColorfulClouds fails → Falls back to `WeatherService` (Open-Meteo)
+4. Response is cached for 30 minutes at both service-level and forecast-level
+
+#### Verified Capabilities
+- ✅ **10-day forecasts** fully supported via ColorfulClouds
+- ✅ **14-day forecasts** available via Open-Meteo fallback
+- ✅ Date handling uses `Carbon` with `Asia/Manila` timezone for consistency
+- ✅ All forecast dates are validated against "today" before response
+
+### Threshold Alerts (Based on Agronomic Standards)
+
+| Condition | Trigger | Alert Type | Recommendation |
+|-----------|---------|------------|----------------|
+| **Cold Stress** | Temp < 15°C | High | "Consider water management to maintain soil temperature." |
+| **Heat Stress** | Temp > 35°C | High | "Ensure adequate water depth (5-10cm) to cool the crop." |
+| **Critical (Flowering)** | Temp > 30°C | Critical | "Maintain 5-10cm water depth; early morning irrigation." |
+| **Low Humidity (Flowering)** | Humidity < 60% | Medium | "Increase water depth to maintain field humidity." |
+| **Disease Risk** | Humidity > 85% | Medium | "Monitor for disease; consider preventive fungicide." |
+| **Wind Advisory** | Wind > 15 km/h | High | "Monitor for lodging; consider early harvest." |
+| **Flooding** | Heavy Rain/Storm | Medium | "Ensure proper drainage; check bund integrity." |
+
+### GDD Calculation
+```php
+$baseTemp = 10; // Minimum for rice growth
+$maxTemp = 30;  // Growth plateaus above this
+
+$effectiveTemp = min($currentTemp, $maxTemp);
+$dailyGDD = max(0, $effectiveTemp - $baseTemp);
+```
+
+### Performance Optimization
+To minimize external API reliance and costs, the system implements a multi-layered optimization strategy:
+1. **Deduplication:** Coordinates are rounded to 2 decimal places (~1.1km) to group nearby fields.
+2. **Database Caching:** Recent `WeatherLog` entries (< 30 mins) serve as the primary data source.
+3. **Service Caching:** External API responses are cached in Redis/File for **30 minutes** for both current conditions and forecasts.
+4. **Batch Processing:** Fields are grouped by location for bulk weather updates.
+5. **Client-Side Caching:** Frontend prevents redundant requests within a 10-minute window.
+
+---
+
+
+---
+
+## 📊 Data Analytics Methodology
+
+This section documents the analytical methodologies, algorithms, and academic foundations used in the system's data analysis features.
+
+### 1. Growing Degree Days (GDD) Calculation
+
+**Methodology:** Standard agrometeorological index for quantifying heat accumulation required for crop development.
+
+**Formula:**
+```
+GDD = Σ max(0, T_eff - T_base)
+
+Where:
+• T_eff = min(T_actual, 30°C)   [Capped effective temperature]
+• T_base = 10°C                  [Base temperature for rice]
+```
+
+**Implementation:** [`WeatherService.php`](app/Services/WeatherService.php#L677-L691)
+
+**Scientific Basis:** Rice varieties typically have a base temperature between 6-10°C, with 10°C used as a standard threshold below which rice growth effectively stops.
+
+**Scientific Alignment:** This implementation directly adapts the location-specific GDD models for Laguna rice varieties as proposed by Poral et al. (2020), ensuring localized accuracy.
+
+**Citations:**
+- Poral, P. A. P., Angcao, J. L., Cuaresma, D. C. N., Dazo, N. A., & Rivera, V. J. B. (2020). Modeling the daily average temperature and designing a growing degree day (GDD) European put option for rice in Laguna. *Journal of Nature Studies*, 19(2), 52-61.
+- Hayashi, K., Llorca, L. P., Bugayong, I. D., Agustiani, N., & Capistrano, A. O. V. (2021). Evaluating the predictive accuracy of the weather-rice-nutrient integrated decision support system (WeRise) to improve rainfed rice productivity in Southeast Asia. *Agriculture*, 11(4), 346.
+
+---
+
+### 2. Weather-Based Yield Prediction Model
+
+**Methodology:** Multi-Factor Weighted Index Model combining weather factors with empirically derived weights.
+
+**Formula:**
+```
+Predicted Yield = Base_Yield × (F_temp × F_rain × F_humidity × F_stress × F_growth)
+
+Where:
+• Base_Yield = 4,500 kg/ha      (Philippine irrigated rice average)
+• F_temp     = Temperature factor      (0-30% impact)
+• F_rain     = Rainfall adequacy       (0-25% impact)
+• F_humidity = Humidity optimization   (0-15% impact)
+• F_stress   = Stress events penalty   (0-20% negative impact)
+• F_growth   = Growth stage alignment  (0-10% impact)
+```
+
+**Factor Details:**
+
+| Factor | Optimal Range | Weight |
+|--------|---------------|--------|
+| Temperature | 22-28°C | 30% |
+| Rainfall | 1,000mm/season | 25% |
+| Humidity | 65-80% | 15% |
+| Stress Days | 0 days | 20% |
+| Growth Alignment | Stage-appropriate | 10% |
+
+**Implementation:** [`WeatherAnalyticsService.php`](app/Services/WeatherAnalyticsService.php#L849-L913)
+
+**Scientific Alignment:** The weighting system is informed by Baltazar's (2024) findings on climate impact scenarios in Central Luzon, prioritizing temperature and rainfall as primary yield determinants.
+
+**Citations:**
+- Baltazar, R. G. (2024). Forecasting the impact of climate change on rice crop yields under RCP4.5 and RCP8.5 scenarios in Central Luzon, Philippines, using machine learning algorithms. *Ciencia e Investigación Agraria*, 51(1), 10-26.
+- Hayashi, K., et al. (2021). Evaluating the predictive accuracy of the weather-rice-nutrient integrated decision support system (WeRise). *Agriculture*, 11(4), 346.
+
+---
+
+### 3. Pest and Disease Risk Prediction
+
+**Methodology:** Rule-Based Expert System derived from epidemiological research on rice pests and diseases, enhanced with **crop growth-stage awareness** for context-specific predictions.
+
+**Risk Prediction Rules:**
+
+| Pest/Disease | Trigger Conditions | Risk Level | Vulnerable Stages |
+|--------------|-------------------|------------|-------------------|
+| **Rice Blast** | Humidity >90%, Temp 25-28°C, Rainfall | High | All stages |
+| **Brown Plant Hopper** | Temp 28-30°C, Humidity >80% | High | Vegetative, Reproductive |
+| **Yellow Stem Borer** | Temp 28-32°C, Humidity >90% | High | Vegetative, Reproductive |
+| **Green Leafhopper** | Temp 32-34°C, Humidity >90% | High | Vegetative |
+| **Rice Tungro Virus** | Temp 24-32°C, Humidity >85% | High | Vegetative |
+| **Rice Black Bug** | Full Moon phase, Humidity >85% | High | Reproductive, Ripening |
+
+**Growth-Stage-Aware Filtering:**
+
+Predictions are filtered per-field based on the crop's current growth stage, derived from the planting date:
+
+| Growth Stage | Days from Planting | Description |
+|--------------|-------------------|-------------|
+| **Vegetative** | 0–45 days | Seedling establishment, tillering |
+| **Reproductive** | 46–75 days | Panicle initiation, booting, heading |
+| **Ripening** | 76+ days | Grain filling, maturation |
+
+Each pest in the library has a `vulnerable_stages` JSON field (e.g., `["vegetative", "reproductive"]`). When a planting is active, the service:
+1. Calculates the growth stage from `planting_date`
+2. Filters out pests whose `vulnerable_stages` don't include the current stage
+3. Appends `stage_note` context to risk descriptions (e.g., "Causes deadheart at vegetative stage" vs "Causes whitehead at reproductive stage")
+
+**Implementation:** [`PestPredictionService.php`](app/Services/PestPredictionService.php)
+
+**Database Schema:**
+- `pest_libraries.vulnerable_stages` — JSON array of growth stages when the pest is most threatening
+- `pest_analytics_rules.stage_note` — Stage-specific context note appended to risk descriptions
+
+**Scientific Basis:** Rice blast (*Magnaporthe oryzae*) development correlates strongly with relative humidity ≥95% and temperatures of 26-27°C. Yellow Stem Borer causes "deadheart" during vegetative stage and "whitehead" during reproductive stage, requiring different management approaches.
+
+**Scientific Alignment:** Logic thresholds for Rice Black Bug and Stemborer risk are calibrated based on the percentile-based outbreak models established by Balleras et al. (2025). Growth stage vulnerability data is derived from IRRI and PhilRice field guides.
+
+**Citations:**
+- Balleras, G. D., Abdula, S. E., Flores, C. G., & Deleña, R. D. (2025). Percentile-based outbreak thresholding for machine learning-driven pest forecasting in rice (*Oryza sativa* L.) farming: A case study on rice black bug and white stemborer. *Sustainability*, 18(1), 182.
+- Katsantonis, D., et al. (2017). Rice blast forecasting models and their practical value. *Phytopathologia Mediterranea*, 56(2), 187-216.
+
+---
+
+### 4. Stress Event Detection
+
+**Methodology:** Threshold-based temporal analysis for identifying weather-related crop stress periods.
+
+**Stress Thresholds:**
+
+| Stress Type | Condition | Severity Classification |
+|-------------|-----------|------------------------|
+| **Heat Stress** | Temp >35°C | Severe (>38°C), Moderate (>36°C), Mild |
+| **Cold Stress** | Temp <15°C | Severe (<10°C), Moderate (<12°C), Mild |
+| **Drought Stress** | Humidity <40% for ≥3 days | Severity by duration |
+| **Flooding Stress** | Rainfall >50mm/day | Severe (>100mm), Moderate (>75mm) |
+
+**Implementation:** [`WeatherAnalyticsService.php`](app/Services/WeatherAnalyticsService.php#L1140-L1239)
+
+**Scientific Alignment:** Stress thresholds (e.g., >35°C for heat) are consistent with the physiological limits reviewed by Mthiyane et al. (2024) and the drought impact assessments by Ortega-Espaldon & Medina (2024).
+
+**Citations:**
+- Mthiyane, P., Aycan, M., & Mitsui, T. (2024). Strategic advancements in rice cultivation: Combating heat stress through genetic innovation and sustainable practices—A review. *Stresses*, 4(3), 452–480.
+- Ortega-Espaldon, M. V., & Medina, C. D. (2024). Climate change and food security in the Philippines: Impacts, adaptation, and climate change action. In *Climate Emergency in the Philippines* (pp. 97–118). Springer Nature.
+
+---
+
+### 5. Weather Suitability Scoring
+
+**Methodology:** Composite scoring system (0-100) using weighted factors.
+
+**Formula:**
+```
+Score = (Temp_Score × 0.40) + (Humidity_Score × 0.30) + 
+        (Conditions_Score × 0.20) + (Wind_Score × 0.10)
+```
+
+| Component | Weight | Optimal Range |
+|-----------|--------|---------------|
+| Temperature | 40% | 20-30°C |
+| Humidity | 30% | 60-80% |
+| Conditions | 20% | Clear/Cloudy |
+| Wind | 10% | ≤15 km/h |
+
+**Implementation:** [`WeatherService.php`](app/Services/WeatherService.php#L707-L735)
+
+**Scientific Alignment:** The component scoring parallels the approach of the WeRise system (Hayashi et al., 2021), focusing on integrating weather and nutrient decision support.
+
+**Citations:**
+- Hayashi, K., Llorca, L. P., Bugayong, I. D., Agustiani, N., & Capistrano, A. O. V. (2021). Evaluating the predictive accuracy of the weather-rice-nutrient integrated decision support system (WeRise) to improve rainfed rice productivity in Southeast Asia. *Agriculture*, 11(4), 346.
+
+---
+
+### 6. Growth Stage Analytics
+
+**Methodology:** Comprehensive analysis combining environmental suitability with operational performance metrics across the crop lifecycle.
+
+#### A. Weather Suitability Analysis
+**Approach:** Stage-specific environmental assessment applying different optimal ranges per growth phase.
+
+**Stage-Specific Optimal Ranges:**
+
+| Growth Stage | Days from Planting | Optimal Temp (°C) | Optimal Humidity (%) |
+|--------------|-------------------|-------------------|---------------------|
+| Seedling | 0-15 | 20-30 | 70-90 |
+| Tillering | 15-60 | 25-32 | 70-85 |
+| Flowering | 60-90 | 25-30 | 70-80 |
+| Grain Filling | 90-120 | 20-28 | 60-75 |
+| Ripening | 120+ | 20-28 | 50-70 |
+
+#### B. Operational Performance Metrics
+**Approach:** Quantitative tracking of stage completion success and timeline adherence.
+
+**Metrics:**
+1.  **Stage Success Rate:** Percentage of growth stages successfully transitioned vs. total attempts.
+    *   *Significance:* Identifies bottleneck stages where crop failure frequently occurs.
+2.  **Completion Efficiency:** Ratio of actual stage duration vs. biological standards.
+    *   *Formula:* `(Completed_On_Time_Stages / Total_Stages) * 100`
+
+**Implementation:** [`RiceFarmingAnalyticsController.php`](app/Http/Controllers/RiceFarmingAnalyticsController.php) & [`WeatherAnalyticsService.php`](app/Services/WeatherAnalyticsService.php)
+
+**Scientific Alignment:** Phenological stage adjustments reflect the critical heat-sensitive periods (flowering/filling) highlighted in studies by Mthiyane et al. (2024) and Baltazar (2024).
+
+**Citations:**
+- Mthiyane, P., Aycan, M., & Mitsui, T. (2024). Strategic advancements in rice cultivation: Combating heat stress through genetic innovation and sustainable practices—A review. *Stresses*, 4(3), 452–480.
+- Baltazar, R. G. (2024). Forecasting the impact of climate change on rice crop yields under RCP4.5 and RCP8.5 scenarios in Central Luzon. *Ciencia e Investigación Agraria*, 51(1), 10-26.
+
+---
+
+### 7. Financial Cash Flow Forecasting
+
+**Methodology:** 6-Month projection using historical averaging for expenses and yield-based revenue prediction.
+
+**Formulas:**
+```
+Projected Revenue = Area_planted × Expected_Yield × Market_Price
+Monthly Projected Expense = Average(Past 3 Months Expenses)
+Net Cash Flow = Projected Revenue - Projected Expenses
+```
+
+**Implementation:** [`DataAnalysisController.php`](app/Http/Controllers/Analytics/DataAnalysisController.php#L707-L776)
+
+**Scientific Alignment:** The projection model aligns with the cost-return frameworks analyzed by Briones (2024) to evaluate RCEF impacts on farmer income stability.
+
+**Citations:**
+- Briones, R. M. (2024). *An empirical evaluation of the Rice Competitiveness Enhancement Fund (RCEF) on the Philippine rice industry* (Policy Brief No. 2024-05). Philippine Institute for Development Studies.
+- Lim, C. T. N. (2023). Empirical analysis of rice prices, production, and consumption in the Philippines. *Review of Integrative Business and Economics Research*, 12(4), 45-62.
+
+---
+
+### 8. Crop Profitability Analysis
+
+**Methodology:** Standard agricultural economics formulas for enterprise analysis.
+
+**Metrics:**
+
+| Metric | Formula |
+|--------|---------|
+| **Net Profit** | Revenue - (Expenses + Labor Costs) |
+| **Profit Margin** | (Net Profit / Revenue) × 100 |
+| **ROI** | (Net Profit / Total Costs) × 100 |
+| **Cost per Hectare** | Total Costs / Total Area |
+| **Revenue per Hectare** | Total Revenue / Total Area |
+
+**Implementation:** [`FinancialService.php`](app/Services/FinancialService.php#L256-L323)
+
+**Scientific Alignment:** Profitability metrics are standardized to facilitate comparison with regional self-sufficiency benchmarks as discussed by Lim (2023).
+
+**Citations:**
+- Lim, C. T. N. (2023). Empirical analysis of rice prices, production, and consumption in the Philippines: Implications for self-sufficiency policy. *Review of Integrative Business and Economics Research*, 12(4), 45-62.
+- World Bank & FAO. *Smallholder Farm Financial Analysis Principles*.
+
+---
+
+### 9. Resource Efficiency Analysis
+**Methodology:** Input-Output ratio analysis normalized against industry benchmarks.
+
+**Metrics:**
+- **Water Efficiency:** Yield (kg) / Water Expenses (₱)
+- **Fertilizer Efficiency:** Yield (kg) / Fertilizer Expenses (₱)
+- **Labor Efficiency:** Yield (kg) / Labor Expenses (₱)
+
+**Scoring:**
+Raw ratios are normalized to a 0-100 scale using configurable benchmarks (e.g., 0.15 kg/₱ for fertilizer).
+
+**Implementation:** [`RiceFarmingAnalyticsController.php`](app/Http/Controllers/RiceFarmingAnalyticsController.php#L348-L386)
+
+**Scientific Alignment:** Efficiency scoring logic is derived from the latest benchmarks for Nitrogen and Water Use Efficiency in Asian aerobic rice production (Nagangoudar et al., 2025).
+
+**Citations:**
+- Nagangoudar, M. B., et al. (2025). Impact of water and nitrogen management strategies on productivity, resource use efficiency, and greenhouse gases emission in aerobic rice. *Environmental and Sustainability Indicators*, 27, 100750.
+- Dobermann, A. (2007). *Nutrient use efficiency – measurement and management*. International Rice Research Institute (IRRI). establishes PFP Target > 40 kg grain/kg N.
+
+---
+
+### 10. Cost Efficiency Benchmarking
+**Methodology:** Comparative analysis of production costs against national averages and target metrics.
+
+**Key Indicators:**
+1.  **Cost per Kg:** Total Expenses / Total Yield (Target: < ₱12.00/kg)
+2.  **Cost per Hectare:** Total Expenses / Area Planted (Target: < ₱50,000/ha)
+
+**Formula:**
+```
+Efficiency Score = (Weight_kg * (1 - Cost_kg/Target_kg)) + 
+                  (Weight_ha * (1 - Cost_ha/Target_ha))
+```
+
+**Implementation:** [`RiceFarmingAnalyticsController.php`](app/Http/Controllers/RiceFarmingAnalyticsController.php#L555-L605)
+
+**Scientific Alignment:** Evaluation criteria are consistent with the competitiveness parameters set forth by the Philippine Institute for Development Studies (Briones, 2024) for assessing rice farming viability.
+
+**Citations:**
+- Briones, R. M. (2024). *An empirical evaluation of the Rice Competitiveness Enhancement Fund (RCEF) on the Philippine rice industry* (Policy Brief No. 2024-05). Philippine Institute for Development Studies.
+- Lim, C. T. N. (2023). Empirical analysis of rice prices, production, and consumption in the Philippines. *Review of Integrative Business and Economics Research*, 12(4), 45-62.
+
+---
+
+### 11. Seasonal Pattern Recognition
+**Methodology:** Time-series segmentation comparing agricultural performance across distinct climatic seasons.
+
+**Seasons Defined:**
+- **Wet Season:** May to October
+- **Dry Season:** November to April
+
+**Analysis:**
+Computes average yield and planting density per season to identify the "Preferred Season" for specific crop varieties.
+
+**Implementation:** [`RiceFarmingAnalyticsController.php`](app/Http/Controllers/RiceFarmingAnalyticsController.php#L618-L639)
+
+**Scientific Alignment:** Seasonal adjustments account for the climate variability and adaptation strategies recommended by Ortega-Espaldon & Medina (2024) for Philippine food security.
+
+**Citations:**
+- Ortega-Espaldon, M. V., & Medina, C. D. (2024). Climate change and food security in the Philippines: Impacts, adaptation, and climate change action. In *Climate Emergency in the Philippines* (pp. 97–118). Springer Nature.
+
+---
+
+### 12. Yield Gap Analysis (Gap II)
+
+**Methodology:** Comparative analysis between Potential Yield (Variety-specific genetic potential) and Actual Farm Yield to identify "exploitable" yield gaps caused by management constraints.
+
+**Formula:**
+```
+Yield Gap = Potential Yield (Y_p) - Actual Yield (Y_a)
+Gap % = ((Y_p - Y_a) / Y_p) × 100
+```
+*Gap II (Management Gap):* The difference between attainable water-limited potential yield and actual farm yield.
+
+**Implementation:** [`RiceProductionAnalyticsService.php`](app/Services/Analytics/RiceProductionAnalyticsService.php)
+
+**Scientific Basis:** Focuses on closing "Gap II" which is addressable through improved nutrient, water, and pest management, distinct from "Gap I" (Environmental/Genetic limits).
+
+**Citations:**
+- FAO (2020). *Yield gap analysis of field crops: Methods and case studies*. FAO Water Reports No. 41.
+- Global Yield Gap Atlas (GYGA). *Standard protocols for determining potential vs. actual yield*.
+
+---
+
+
+### 13. Failure Analysis Module
+**Methodology:** Distributional grouping and temporal averaging of failed plantings — categorized by failure cause (Pest, Weather, Flood, Disease, Other) and cross-referenced by Variety and Season — to compute `avg_days_before_failure` (the mean elapsed days from planting date to the recorded failure timestamp).
+**Function:** Identifies which failure categories, crop varieties, and seasons produce the shortest survival windows, enabling preemptive risk profiling before the identified vulnerability thresholds are reached.
+**Implementation:** [`DataAnalysisController.php`](app/Http/Controllers/Analytics/DataAnalysisController.php)
+
+**Scientific Alignment:** The failure categorization approach mirrors the hazard-taxonomy framework used by the DA-DRRM Operations Center, which classifies rice production losses under climate hazards (typhoon, flood, drought) and biological risks (pest outbreaks) across growth stages.
+
+**Citations:**
+- Department of Agriculture – Disaster Risk Reduction and Management (DA-DRRM) Operations Center. (2023). *Damage and loss assessment framework for agricultural crops in the Philippines*. Republic of the Philippines, Department of Agriculture.
+- Leblois, A., Quirion, P., & Sultan, B. (2014). Price vs. weather shock hedging for cash crops: Ex ante evaluation for cotton producers in Cameroon. *Ecological Economics*, 101, 67–80. *(Foundational methodology for categorizing crop loss by cause type.)*
+
+---
+
+### 14. Post-Harvest Cost Optimization
+**Methodology:** Decomposes completed post-harvest process records into per-unit execution costs (`cost / output_quantity`) segregated by cost type (self-managed vs. service-provider), then computes average unit costs per category for direct comparison.
+**Function:** Surfaces the average cost-per-unit for self-managed versus provider-engaged post-harvest workflows to flag economically inefficient processing modes and identify where outsourcing or mechanization yields greater cost efficiency.
+**Implementation:** [`DataAnalysisController.php`](app/Http/Controllers/Analytics/DataAnalysisController.php) and [`RiceProductionAnalyticsService.php`](app/Services/Analytics/RiceProductionAnalyticsService.php)
+
+**Scientific Alignment:** The unit-cost decomposition approach aligns with the post-harvest loss quantification methodology established by the FAO and applied in Philippine rice-chain studies, where separating mechanical process costs is critical to identifying actionable savings.
+
+**Citations:**
+- FAO. (2019). *The state of food and agriculture 2019: Moving forward on food loss and waste reduction*. Food and Agriculture Organization of the United Nations.
+- Gummert, M., Vo, N. T., Cabardo, J., & Rickman, J. (2020). Reducing post-harvest losses and improving food quality. In *Achieving sustainable cultivation of rice in Asia* (Vol. 1, pp. 467–494). Burleigh Dodds Science Publishing.
+
+---
+
+### 15. Risk Reflex Engine
+**Methodology:** Concurrent evaluation of active pest prediction risks (from `PestPredictionService`) and the current weather trend risk level (derived from `WeatherAnalyticsService`), which are then scored using a tiered weighting system (`critical = 3`, `high = 2`, `medium = 1`, `low = 0.3`) and capped at a normalized (0–100) composite risk score.
+**Function:** Emits a continuous operational pest-weather risk score used strictly to prioritize immediate daily field adjustments (e.g., irrigation changes, IPM protocols) rather than long-term strategic plans.
+**Implementation:** [`RiceFarmingAnalyticsController.php`](app/Http/Controllers/RiceFarmingAnalyticsController.php)
+
+**Scientific Alignment:** The tiered severity-scoring design is consistent with the Integrated Pest Management (IPM) risk escalation frameworks advocated by IRRI and PhilRice, where pest pressure triggers are classified by economic injury thresholds to direct proportional responses.
+
+**Citations:**
+- Heong, K. L., Escalada, M. M., Huan, N. H., & Mai, V. (1998). Use of communication media in changing rice farmers' pest management in the Mekong Delta, Vietnam. *Crop Protection*, 17(5), 413–425.
+- Savary, S., Willocquet, L., Pethybridge, S. J., Esker, P., McRoberts, N., & Nelson, A. (2019). The global burden of pathogens and pests on major food crops. *Nature Ecology & Evolution*, 3(3), 430–439.
+
+---
+
+### 16. Weather Data Quality Metrics
+**Methodology:** Weighted multi-dimensional quality scoring of weather log records assessing: **Completeness** (40%) — ratio of complete records (temperature + humidity + conditions all present) to total records; **Recency** (30%) — proportion of records logged within the last 7 days; **Consistency** (30%) — statistical standard deviation of temperature and humidity readings as a proxy for sensor stability.
+**Function:** Computes a `quality_score` (0–100) that reflects data stream reliability, allowing the system to downgrade confidence in GDD accumulation and agronomic model outputs when sensor coverage is low or inconsistent.
+**Implementation:** [`WeatherAnalyticsService.php`](app/Services/WeatherAnalyticsService.php)
+
+**Scientific Alignment:** The three-dimensional quality assessment (completeness, recency, consistency) mirrors standard Data Quality (DQ) frameworks applied to IoT-driven agricultural monitoring systems, where sensor drop-outs and temporal gaps are the primary quality degradation factors.
+
+**Citations:**
+- Sattler, C., Mantel, S., Zander, P., Olabisi, L. S., & Moonga, H. B. (2022). Challenges and approaches for assessing data quality in agricultural monitoring networks. *Computers and Electronics in Agriculture*, 196, 106918.
+- Blasi, B., Diehl, J., Görzen, M., Hartung, E., & Jungbluth, T. (2021). Evaluation of data quality dimensions in precision livestock farming: A review framework. *Agriculture*, 11(3), 242.
+
+---
+
+### 17. Performance Benchmarking
+**Methodology:** Comparative scoring system that measures current farm Key Performance Indicators (yield per hectare, cost per hectare, revenue per hectare, profit margin, labor efficiency) against predefined industry benchmark targets. Each KPI is scored as above or below benchmark, and a normalized composite performance score (0–100%) is calculated by averaging percentage deviations.
+**Function:** Produces a unified performance grade showing how the farm compares to industry standards across production, financial, and labor efficiency dimensions, enabling targeted identification of underperforming areas.
+**Implementation:** [`ReportService.php`](app/Services/ReportService.php)
+
+**Scientific Alignment:** The comparative benchmark approach follows established agricultural productivity assessment practices used in smallholder farm evaluations in Southeast Asia, where KPI-based scorecards (yield/ha, cost/ha) are applied as diagnostic tools for measuring farm competitiveness.
+
+**Citations:**
+- Briones, R. M. (2024). *An empirical evaluation of the Rice Competitiveness Enhancement Fund (RCEF) on the Philippine rice industry* (Policy Brief No. 2024-05). Philippine Institute for Development Studies.
+- Hengsdijk, H., Meijerink, G. W., & Mosugu, M. E. (2005). Modeling the effect of three soil and water conservation practices in Tigray, Ethiopia. *Agriculture, Ecosystems & Environment*, 105(1–2), 29–40. *(KPI-based farm assessment methodology.)*
+
+---
+
+### Methodological Summary
+
+| Analytics Component | Approach Type |
+|--------------------|---------------|
+| GDD Calculation | **Established** (Standard agrometeorological formula) |
+| Yield Prediction | **Heuristic** (Multi-factor weighted index) |
+| Pest/Disease Risk | **Knowledge-based** (Rule-based expert system) |
+| Stress Detection | **Deterministic** (Threshold-based analysis) |
+| Weather Suitability | **Heuristic** (Weighted composite scoring) |
+| Growth Stage Analysis | **Research-based** (Stage-specific optimal ranges) |
+| Financial Forecasting | **Standard practice** (Historical averaging + projections) |
+| Profitability Analysis | **Established** (Standard financial metrics) |
+| Resource Efficiency | **Benchmarking** (Input-Output ratio vs Standards) |
+| Cost Efficiency | **Benchmarking** (Comparative analysis) |
+| Seasonal Patterns | **Descriptive** (Time-series segmentation) |
+| Failure Correlative Analysis | **Descriptive** (Distributional averaging) |
+| Process Cost Optimization | **Deterministic** (Unit cost vs Price margin mapping) |
+| Risk Reflex Aggregation | **Heuristic** (Cumulative threat scoring) |
+| Sensor Data Integrity | **Statistical** (Continuity and variance bounding) |
+
+---
+
+## ✅ Functional Requirements
+
+### 1. Farm Management
+- **Farmers** can create, update, and delete farm plans (fields, plantings).
+- The system tracks farm activities: planting, harvesting, labor assignments, and inventory use.
+- Farmers can log and view resource usage (seeds, fertilizer, labor wages).
+
+### 2. Weather Analytics
+- The system fetches real-time weather data via **Open-Meteo API**.
+- Weather forecasts (10-14 day) are displayed and updated.
+- System provides **Agronomic Alerts** (Heat Stress, High Humidity) to support decisions.
+
+### 3. Marketplace
+- **Buyers** can register, browse products, and place orders.
+- **Farmers** can post rice products with pricing, quality, and grading details.
+- System supports **Order Messaging** between buyers and farmers within order context.
+- **Payment Handling**: The system tracks payment status but does *not* process online payments automatically; transactions are confirmed manually (COD/Bank Transfer).
+
+### 4. User Management
+- Users register as either **Farmer** or **Buyer**.
+- Authentication requires **Email Verification** and password login.
+- Users can manage their profiles (bio, contact info).
+- *Note: No manual Administrator approval is required for registration; email verification is the primary gatekeeper.*
+
+### 5. Dashboard & Analytics
+- Visual summaries of farm activities, weather history, and yield data.
+- Farmers can track sales, expenses, and profit/loss reports.
+- Data export options (PDF/CSV) are available for inventory and sales.
+
+## ⚡ Non-Functional Requirements
+
+### 1. Performance
+- Weather data should be cached to minimize API calls (Refreshes every **30 minutes**).
+- Dashboard and charts should load efficiently using optimized database queries.
+
+### 2. Scalability
+- The system supports multiple concurrent users (Farmers and Buyers).
+- Database design allows for growth in historical weather logs and transaction records.
+
+### 3. Usability
+- Interface is responsive (Mobile/Desktop friendly) using **Vue.js** & **Tailwind CSS**.
+- Navigation is role-based (Farmer Dashboard vs. Marketplace).
+
+### 4. Reliability
+- External APIs (Weather) have error handling and fallback mechanisms.
+- System maintains data integrity for financial records (Sales/Expenses).
+
+### 5. Security
+- Use of **Laravel Sanctum** for secure API authentication.
+- Password hashing (BCrypt) and email verification are mandatory.
+- Role-Based Access Control (RBAC) ensures Buyers cannot access Farmer data.
+
+---
+
+
+
+## 🤖 Automation & Scheduled Jobs
+
+The system relies on Laravel Scheduler to perform background maintenance and notifications.
+
+| Command | Schedule | Purpose |
+|---------|----------|---------|
+| `inventory:check-expiry` | Daily (8:00 AM) | Checks for expiring items and notifies farmers. |
+| `reports:send-scheduled` | Hourly | Checks for due scheduled reports and emails them. |
+| `pre-orders:send-notifications` | Daily (9:00 AM) | Sends emails for production availability and pickup reminders. |
+| `orders:send-deadline-warnings` | Daily (8:00 AM) | Sends email to farmers about orders expiring in 24 hours. |
+| `orders:cancel-expired-pickups` | Hourly | Cancels orders past deadline, restores inventory, notifies buyer+farmer. |
+| `weather:monitor` | Hourly | Monitors fields for critical weather conditions and triggers Email/Push alerts. |
+| `tasks:process-due` | Daily (10:00 AM) | Auto-completes overdue tasks and generates associated labor wage/expense records. |
+
+---
+
+## ⚙️ Installation & Setup
+
+### Prerequisites
+- PHP 8.2+
+- Composer 2.x
+- Node.js 18+ / npm
+- PostgreSQL 14.0+
+
+### Steps
+
+```bash
+# 1. Clone the repository
+git clone <repository-url>
+cd farm_operation_management
+
+# 2. Install PHP dependencies
+composer install
+
+# 3. Install Node dependencies
+npm install
+
+# 4. Environment setup
+cp .env.example .env
+php artisan key:generate
+
+# 5. Configure database in .env
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=farm_management
+DB_USERNAME=postgres
+DB_PASSWORD=your_password
+
+# 6. Run migrations and seeders
+php artisan migrate --seed
+
+# 7. Start development servers
+composer run dev
+# This runs: php artisan serve & npm run dev (concurrently)
+```
+## 🔄 Automated Tasks & Background Processing
+
+The system includes several automated background tasks that run on scheduled intervals to maintain data integrity and provide proactive features:
+
+### Scheduled Commands
+
+| Command | Frequency | Purpose |
+|---------|-----------|---------|
+| `pre-orders:send-notifications` | Daily at 9:00 AM | Sends notifications for upcoming pre-orders |
+| `inventory:check-expiry` | Daily at 8:00 AM | Checks for expiring inventory items |
+| `reports:send-scheduled` | Hourly | Sends scheduled reports to users |
+| `orders:send-deadline-warnings` | Daily at 8:00 AM | Warns farmers about expiring pickup deadlines |
+| `orders:cancel-expired-pickups` | Hourly | Auto-cancels orders past pickup deadline |
+| `weather:monitor` | Hourly | Monitors weather conditions and triggers alerts |
+| `tasks:process-due` | Daily at 10:00 AM | **NEW:** Auto-completes overdue tasks and generates wages |
+
+### Task Due Date Automation
+
+The `tasks:process-due` command automatically handles overdue labor tasks:
+
+- **Trigger:** Runs daily at 10:00 AM (Asia/Manila timezone)
+- **Logic:** Finds tasks where `due_date <= current_time` and `status != 'completed'`
+- **Action:** Marks tasks as completed and generates labor wages/expenses
+- **Wage Calculation:** Uses the same logic as manual completion, calculating based on:
+  - Task creation date to due date interval
+  - Laborer rate type (`per_day` or `per_task`)
+  - Task-specific wage amounts if set
+
+### Docker Integration
+
+All scheduled commands run automatically in Docker via Supervisor:
+
+```yaml
+# docker/supervisord.conf
+[program:scheduler]
+command=php /var/www/html/artisan schedule:work
+autostart=true
+autorestart=true
+```
+
+The scheduler runs continuously in the background, executing commands at their defined intervals without manual intervention.
+
+### Manual Command Execution
+
+For testing or manual execution:
+
+```bash
+# Process due tasks immediately
+php artisan tasks:process-due
+
+# Check scheduled commands
+php artisan schedule:list
+
+# Run scheduler manually (for testing)
+php artisan schedule:work
+```
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+php artisan test
+
+# Run specific test suite
+php artisan test --filter=InventoryTest
+php artisan test --filter=OrderNegotiationTest
+php artisan test --filter=HarvestTest
+```
+
+### Test Coverage Areas
+- **AuthTest:** Registration, login, 2FA verification
+- **InventoryTest:** WAC calculation, stock management
+- **HarvestTest:** Yield recording, share calculation
+- **OrderNegotiationTest:** Price negotiation flow
+- **SystemSimulationTest:** End-to-end farmer/buyer lifecycle
+
+---
+
+
+---
+
+## 🧪 Testing Methodology
+
+### Unit Testing
+Unit testing verified the smallest units of code in isolation. Laravel's built-in **PHPUnit** support was used to write automated unit tests for services and helper methods, ensuring that each component met its specification. Best practices included writing clear, focused tests to catch bugs early.
+
+*   **Tools Used:** `phpunit/phpunit`, `mockery/mockery`
+*   **Scope:** Tests one small piece of code (usually a function or class method) in isolation.
+*   **Automation:** Integrated into the development workflow to ensure stability before deployment.
+
+### Feature Testing
+Feature (or integration) testing evaluates how features and components work together. In Laravel, "feature tests" simulate HTTP requests or user actions across the stack (e.g., controller logic, middleware, database) to validate end-to-end behavior.
+
+*   **Tools Used:** **Laravel Testing Framework**, **PHPUnit**
+*   **Scope:** Verifies that multiple modules/features work together correctly.
+*   **Coverage:**
+
+    *   **User Flows:** `AuthTest`, `SystemSimulationTest`
+    *   **Core Operations:** `HarvestTest`, `SeedPlantingTest`, `OrderNegotiationTest`
+    *   **Analytics:** `DataAnalysisTest`, `WeatherReportTest`
+    *   **Security:** `SecurityMiddlewareTest` (RBAC verification)
+
+### Static Analysis
+To ensure type safety and code quality beyond standard linting, static analysis was employed.
+
+*   **Tool Used:** **Larastan** (`larastan/larastan`)
+*   **Purpose:** Catches distinct classes of bugs (like type errors) before code is even run, enhancing maintainability.
+
+---
+
+## 🛠️ Technical Architecture & Stack
+
+This system is built using a modern, scalable tech stack designed for reliability and ease of deployment.
+
+### 1. Conceptual Architecture
+The application follows a **Monolithic Architecture** with a clear separation of concerns:
+- **Presentation Layer:** Vue.js (SPA) managing user interactions.
+- **Application Layer:** Laravel handling business logic, API routes, and job scheduling.
+- **Data Layer:** PostgreSQL for persistent storage.
+- **Service Layer:** Dedicated services for Weather, Recommendations, and Market logic.
+
+### 2. Technology Stack
+
+| Component | Technology | Description |
+|-----------|------------|-------------|
+| **IDE** | **Visual Studio Code** | Primary development environment with extensions for Laravel and Vue. |
+| **Backend** | **Laravel 12 (PHP 8.2)** | Handles API, Authentication (Sanctum), and Business Logic. |
+| **Frontend** | **Vue.js 3** | Reactive UI framework for a dynamic Single Page Application (SPA). |
+| **Styling** | **Tailwind CSS 4.0** | Utility-first CSS framework for responsive design. |
+| **State Mgmt** | **Pinia** | Store library for managing application state (User, Cart, Farm). |
+| **Database** | **PostgreSQL 14+** | Primary relational database for data integrity. Hosted on **Railway**. |
+| **Visualization** | **Chart.js** | Renders interactive analytics graphs for farmers. |
+| **DevOps** | **Docker** | Containerization for consistent local development and deployment. |
+| **Deployment** | **Railway** | Cloud platform hosting both the Web Service and Database. |
+| **Caching** | **Laravel Cache** | Integrated caching (File/Database) for Weather API responses. |
+| **Testing** | **PHPUnit / Larastan** | Automated creation testing and Static Analysis. |
+
+### 3. Hybrid Weather Architecture
+To ensure agricultural accuracy and system resilience, the system employs a **Multi-Provider Strategy**:
+- **Primary Provider:** **Colorful Clouds API**
+    - Used for hyper-local, **10-day** forecasts (API hard-cap: `dailysteps` ≤ 10).
+    - specialized in Asian/Pacific weather patterns.
+- **Fallback Provider:** **Open-Meteo** & **OpenWeather**
+    - Automatically engaged if the primary provider fails.
+    - Provides standard meteorological data and current condition checks.
+- **Result:** High availability and data accuracy for critical farming decisions.
+
+### 4. Security & Infrastructure
+- **Authentication:** **Laravel Sanctum** provides secure token-based authentication for the SPA and mobile access.
+- **Tunneling:** **Ngrok** is used for exposing local development environments for mobile testing.
+- **Version Control:** **GitHub** manages source code, issue tracking, and collaboration.
+
+---
+
+---
+
+### � Production Deployment (Docker)
+The application is containerized using **Docker** for consistent deployment across environments (e.g., Railway).
+
+#### 1. Dockerfile
+- **Multi-Stage Build:** Uses a lightweight `php:8.2-fpm` base image.
+- **Nginx Integration:** Bundles Nginx to serve the Vue.js frontend and proxy API requests.
+- **Optimization:** Installs only necessary extensions (`pdo_pgsql`, `bcmath`, `gd`, `intl`, `zip`) to keep the image size small.
+
+#### 2. Process Management (`supervisord`)
+Instead of running a single process, the container uses **Supervisord** to manage multiple critical services simultaneously:
+- **Nginx:** Serves the web application.
+- **PHP-FPM:** Handles backend requests.
+- **Laravel Scheduler:** Runs `php artisan schedule:work` every minute to execute background tasks (Weather updates, Alerts).
+
+#### 3. Entrypoint Script (`docker/run.sh`)
+When the container starts, `run.sh` executes the following automation:
+1.  **Cache Clearing:** Runs `optimize:clear` to remove old configs.
+2.  **Database Migration:** Automatically executing `php artisan migrate --force` ensures the database schema is always up-to-date.
+3.  **Storage Linking:** Creates the `public/storage` symbolic link.
+4.  **Caching:** Runs `config:cache`, `event:cache`, `route:cache`, and `view:cache` for maximum performance.
+5.  **Start Supervisord:** Launches the main process manager.
+
+This setup ensures a **"Zero-Touch" deployment**: just push the code, and the system auto-updates, migrates, and optimizes itself.
+
+### Core Resources & Metadata
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/rice-varieties` | List supported rice varieties |
+| GET | `/api/rice-growth-stages` | List standard growth stages |
+| GET | `/api/notifications` | Get user notifications |
+
+### Authentication
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/register` | User registration |
+| POST | `/api/login` | User login (returns Sanctum token) |
+| POST | `/api/logout` | Revoke token |
+
+### Farmer Routes (Protected: `auth:sanctum`, `farmer`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/farmer/profile` | Get farmer profile |
+| GET | `/api/fields` | List fields |
+| POST | `/api/fields` | Create field |
+| GET | `/api/plantings` | List plantings |
+| POST | `/api/plantings` | Create planting |
+| GET | `/api/harvests` | List harvests |
+| POST | `/api/harvests` | Record harvest |
+| GET | `/api/inventory` | List inventory items |
+| POST | `/api/inventory` | Add inventory item |
+| GET | `/api/tasks` | List tasks |
+| POST | `/api/tasks` | Create task |
+| POST | `/api/tasks/{id}/complete` | Mark task complete |
+| POST | `/api/seed-plantings` | Create nursery batch (Auto-deducts seed stock) |
+| GET | `/api/rice-farming/lifecycle-overview` | Get overview of all active plantings |
+| POST | `/api/rice-farming/plantings/{id}/advance-stage` | Advance planting to next stage |
+
+### Marketplace Routes
+
+#### Public Routes (No Auth Required - Guest Browsing)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/rice-marketplace/products` | List available products |
+| GET | `/api/rice-marketplace/products/{id}` | View product details |
+| GET | `/api/rice-marketplace/products/{id}/reviews` | View product reviews |
+| GET | `/api/rice-marketplace/stats` | Marketplace statistics |
+
+#### Protected Routes (Requires: `auth:sanctum`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/rice-marketplace/products` | Create product (Farmer only) |
+| GET | `/api/rice-marketplace/cart` | View cart |
+| POST | `/api/rice-marketplace/cart` | Add item to cart |
+| POST | `/api/rice-marketplace/cart/checkout` | Place order |
+| GET | `/api/rice-marketplace/orders` | List orders (Buyer/Farmer) |
+| POST | `/api/rice-marketplace/orders/{id}/accept` | Accept order (Farmer) |
+| POST | `/api/rice-marketplace/orders/{id}/ready-for-pickup` | Mark ready (Farmer) |
+
+### Specialized Analytics & Reports
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/weather/rice-dashboard` | Get specialized rice weather analytics |
+| GET | `/api/reports/profit-loss` | Get overall Profit & Loss summary |
+| GET | `/api/reports/profit-loss/by-planting` | Get P&L breakdown by planting cycle |
+| GET | `/api/pest-incidents` | List recorded pest incidents |
+| POST | `/api/pest-incidents` | Report a new pest incident |
+| GET | `/api/pest-incidents/analytics` | Get comprehensive pest analytics (type/severity breakdown, monthly trends, treatment costs, top pests, avg resolution time) |
+
+
+
+## 🚀 Recent Architecture & Feature Stabilization (April 2026)
+
+To ensure high data integrity, reliability, and accuracy across operations, several critical backend features and test suites were audited and stabilized:
+
+**1. Analytics & Dashboard Engine Correction**
+- **Dual-Polymorphism Fix:** `DataAnalysisController` and `DashboardController` were restricted from fetching tasks purely by `planting_id`. Because tasks in the system act as a polymorphic layer targeting both specific `Plantings` (crop-specific) and the overarching `Field` (general land maintenance), SQL aggregation logic was updated with `orWhere` parameters to ingest both field-level and crop-level tasks. Dashboard and analytics UI figures are now 100% synced with backend operations.
+
+**2. Post-Harvest Module Integrity**
+- Standardized backend controller validations on `HarvestController` to strictly accept `bushels` as the default output unit to protect mathematical algorithms downstream from miscalculating `sacks` to `kg` conversions during post-harvest shrinkage deductions.
+- Stabilized `PostHarvestService` and the accompanying UI Vue components to accurately complete threshing, milling, and drying operations which generate weight-loss calculations mapped dynamically to `InventoryItem` generation.
+
+**3. Test Suite Remediation**
+- Overhauled and synchronized all PHPUnit core tests including `HarvestOperationTest`, `HarvestShareExpenseTest`, `HarvestTest`, and `SystemSimulationTest`. Corrected all legacy mock API request parameters to strictly adhere to the unified standard of `bushels`.
+- Adjusted assertion hooks to match the dynamic `orWhere` data analytics aggregation logic, resulting in a perfectly stable testing environment (100% passing across the board).
+
+## 📄 License
+This project is developed as a capstone project for academic purposes.
+
+---
+
+## 👥 Contributors
+- **Capstone Team** - Yohan Lukin Callanta, Cydiemar Lagrosas, Renelle Janos Panague
+- **Advisor** - Glyrhiz Marhiel Tabamo
+
+---
+
+<p align="center">
+  <sub>Built with ❤️ for the farmers of Bukidnon</sub>
+</p>

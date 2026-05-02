@@ -2,7 +2,7 @@
   <div class="min-h-screen bg-gray-50">
     <!-- Header -->
     <header class="bg-white shadow-sm border-b border-gray-200">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="w-full mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between items-center py-4">
           <div class="flex items-center">
             <router-link to="/cart" class="text-gray-500 hover:text-gray-700 mr-4">
@@ -20,7 +20,7 @@
     </header>
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <main class="w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div v-if="marketplaceStore.cartItemsCount === 0" class="text-center py-12">
         <p class="text-gray-600 mb-4">Your cart is empty.</p>
         <router-link 
@@ -35,34 +35,34 @@
         <!-- Checkout Form -->
         <div class="lg:col-span-2 space-y-6">
           
-          <!-- Shipping Address -->
+          <!-- Pickup Method & Date -->
           <div class="bg-white rounded-lg shadow p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Shipping Address</h3>
-            <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
-              <div class="sm:col-span-6">
-                <label for="street" class="block text-sm font-medium text-gray-700">Street Address</label>
-                <input type="text" id="street" v-model="form.address.street" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Delivery Method</h3>
+            
+            <div class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+              <div class="flex items-center gap-2 text-gray-800 font-medium mb-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+                  <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v6.05A2.5 2.5 0 0115.95 16H17a1 1 0 001-1v-5a1 1 0 00-.293-.707l-2-2A1 1 0 0014 7z" />
+                </svg>
+                <span>Pickup from Farm</span>
               </div>
+              <p class="text-sm text-gray-600 ml-7">
+                Your order will be prepared for pickup at the farmer's location.
+              </p>
+            </div>
 
-              <div class="sm:col-span-2">
-                <label for="city" class="block text-sm font-medium text-gray-700">City</label>
-                <input type="text" id="city" v-model="form.address.city" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm">
-              </div>
-
-              <div class="sm:col-span-2">
-                <label for="state" class="block text-sm font-medium text-gray-700">State / Province</label>
-                <input type="text" id="state" v-model="form.address.state" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm">
-              </div>
-
-              <div class="sm:col-span-2">
-                <label for="postal_code" class="block text-sm font-medium text-gray-700">Postal Code</label>
-                <input type="text" id="postal_code" v-model="form.address.postal_code" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm">
-              </div>
-              
-              <div class="sm:col-span-6">
-                <label for="country" class="block text-sm font-medium text-gray-700">Country</label>
-                <input type="text" id="country" v-model="form.address.country" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm">
-              </div>
+            <div class="mb-4">
+              <label for="pickup_date" class="block text-sm font-medium text-gray-700 mb-1">Preferred Pickup Date *</label>
+              <input 
+                type="date" 
+                id="pickup_date" 
+                v-model="form.preferred_pickup_date" 
+                :min="minPickupDate"
+                required
+                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              />
+              <p class="text-xs text-gray-500 mt-1">Choose when you'd like to pick up your order</p>
             </div>
           </div>
 
@@ -71,50 +71,18 @@
             <h3 class="text-lg font-medium text-gray-900 mb-4">Delivery Method</h3>
             <div class="space-y-4">
               <div class="flex items-center">
-                <input id="delivery_courier" name="delivery_method" type="radio" value="courier" v-model="form.delivery_method" class="focus:ring-green-500 h-4 w-4 text-green-600 border-gray-300">
-                <label for="delivery_courier" class="ml-3 block text-sm font-medium text-gray-700">
-                  Courier Delivery (Standard)
-                </label>
-              </div>
-              <div class="flex items-center">
-                <input id="delivery_pickup" name="delivery_method" type="radio" value="pickup" v-model="form.delivery_method" class="focus:ring-green-500 h-4 w-4 text-green-600 border-gray-300">
+                <input id="delivery_pickup" name="delivery_method" type="radio" value="pickup" v-model="form.delivery_method" class="focus:ring-green-500 h-4 w-4 text-green-600 border-gray-300" checked>
                 <label for="delivery_pickup" class="ml-3 block text-sm font-medium text-gray-700">
                   Pickup from Farm
                 </label>
               </div>
-              <div class="flex items-center">
-                <input id="delivery_truck" name="delivery_method" type="radio" value="truck" v-model="form.delivery_method" class="focus:ring-green-500 h-4 w-4 text-green-600 border-gray-300">
-                <label for="delivery_truck" class="ml-3 block text-sm font-medium text-gray-700">
-                  Truck Delivery (Bulk Orders)
-                </label>
-              </div>
+              <p class="text-sm text-gray-500 ml-7">
+                Products must be picked up directly from the farmer's location. Contact the farmer for pickup schedule and location details after placing your order.
+              </p>
             </div>
           </div>
 
-          <!-- Payment Method -->
-          <div class="bg-white rounded-lg shadow p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Payment Method</h3>
-            <div class="space-y-4">
-              <div class="flex items-center">
-                <input id="payment_cod" name="payment_method" type="radio" value="cod" v-model="form.payment_method" class="focus:ring-green-500 h-4 w-4 text-green-600 border-gray-300">
-                <label for="payment_cod" class="ml-3 block text-sm font-medium text-gray-700">
-                  Cash on Delivery (COD)
-                </label>
-              </div>
-              <div class="flex items-center">
-                <input id="payment_bank" name="payment_method" type="radio" value="bank_transfer" v-model="form.payment_method" class="focus:ring-green-500 h-4 w-4 text-green-600 border-gray-300">
-                <label for="payment_bank" class="ml-3 block text-sm font-medium text-gray-700">
-                  Bank Transfer
-                </label>
-              </div>
-              <div class="flex items-center">
-                <input id="payment_gcash" name="payment_method" type="radio" value="gcash" v-model="form.payment_method" class="focus:ring-green-500 h-4 w-4 text-green-600 border-gray-300">
-                <label for="payment_gcash" class="ml-3 block text-sm font-medium text-gray-700">
-                  GCash
-                </label>
-              </div>
-            </div>
-          </div>
+
           
           <!-- Notes -->
            <div class="bg-white rounded-lg shadow p-6">
@@ -124,6 +92,9 @@
               <textarea id="notes" v-model="form.notes" rows="3" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm"></textarea>
             </div>
           </div>
+          
+          <!-- Price Negotiation -->
+
 
         </div>
 
@@ -147,10 +118,7 @@
                   <span class="text-gray-600">Shipping</span>
                   <span class="text-gray-900">{{ formatCurrency(shippingCost) }}</span>
                 </div>
-                <div class="flex justify-between text-sm mb-2">
-                  <span class="text-gray-600">Tax (8%)</span>
-                  <span class="text-gray-900">{{ formatCurrency(taxAmount) }}</span>
-                </div>
+
                 <div class="border-t border-gray-200 pt-2 flex justify-between text-lg font-semibold">
                   <span class="text-gray-900">Total</span>
                   <span class="text-gray-900">{{ formatCurrency(totalAmount) }}</span>
@@ -159,7 +127,7 @@
             </div>
 
             <button 
-              @click="submitOrder"
+              @click="confirmOrder"
               :disabled="loading"
               class="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center"
             >
@@ -176,6 +144,17 @@
           </div>
         </div>
       </div>
+      
+      <!-- Confirmation Modal -->
+      <ConfirmationModal
+        :show="showConfirmModal"
+        :title="confirmTitle"
+        :message="confirmMessage"
+        :confirm-text="confirmButtonText"
+        type="success"
+        @close="showConfirmModal = false"
+        @confirm="submitOrder"
+      />
     </main>
   </div>
 </template>
@@ -186,90 +165,108 @@ import { useRouter } from 'vue-router';
 import { useMarketplaceStore } from '@/stores/marketplace';
 import { useAuthStore } from '@/stores/auth';
 import { formatCurrency } from '@/utils/format';
+import ConfirmationModal from '@/Components/UI/ConfirmationModal.vue';
+import { useFormValidation } from '@/composables/useFormValidation';
 
 const router = useRouter();
 const marketplaceStore = useMarketplaceStore();
 const authStore = useAuthStore();
+const { errors: clientErrors, rules, validateForm, sanitizeForm, clearErrors } = useFormValidation();
 
 const loading = ref(false);
 const error = ref(null);
 
+// Confirmation State
+const showConfirmModal = ref(false);
+const confirmTitle = ref('');
+const confirmMessage = ref('');
+const confirmButtonText = ref('Place Order');
+
 const form = ref({
   address: {
-    street: '',
+    street: 'Pickup from farmer',
     city: '',
     state: '',
     postal_code: '',
     country: 'Philippines'
   },
-  delivery_method: 'courier',
+  delivery_method: 'pickup',
   payment_method: 'cod',
-  notes: ''
+  notes: '',
+  preferred_pickup_date: ''
 });
 
+// Computed: minimum pickup date (tomorrow)
+const minPickupDate = computed(() => {
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  return tomorrow.toISOString().split('T')[0]
+})
+
 // Pre-fill address from user profile if available
-onMounted(() => {
-  if (authStore.user && authStore.user.address) {
-    const userAddr = authStore.user.address;
-    form.value.address = {
-      street: userAddr.street || '',
-      city: userAddr.city || '',
-      state: userAddr.state || '',
-      postal_code: userAddr.postal_code || '',
-      country: userAddr.country || 'Philippines'
-    };
-  }
+onMounted(async () => {
+  await marketplaceStore.fetchCart();
+  // No need to pre-fill address for pickup
 });
 
 const shippingCost = computed(() => {
-  return marketplaceStore.cartTotal >= 50 ? 0 : 10;
-});
-
-const taxAmount = computed(() => {
-  return marketplaceStore.cartTotal * 0.08;
+  return 0; // Free shipping for pickup
 });
 
 const totalAmount = computed(() => {
-  return marketplaceStore.cartTotal + shippingCost.value + taxAmount.value;
+  return marketplaceStore.cartTotal + shippingCost.value;
 });
 
-const submitOrder = async () => {
-  loading.value = true;
-  error.value = null;
-
-  // Basic validation
-  if (!form.value.address.street || !form.value.address.city) {
-    error.value = 'Please complete the shipping address.';
-    loading.value = false;
+const confirmOrder = () => {
+  // Basic validation before showing confirmation
+  if (!form.value.preferred_pickup_date) {
+    error.value = 'Please select a preferred pickup date.';
+    return;
+  }
+  
+  clearErrors();
+  sanitizeForm(form.value);
+  const isValid = validateForm(form.value, {
+    notes: [rules.maxLength(2000), rules.noEmoji]
+  });
+  
+  if (!isValid) {
+    error.value = Object.values(clientErrors.value).join(' ');
     return;
   }
 
+  error.value = null;
+  confirmTitle.value = 'Confirm Purchase';
+  
+  confirmMessage.value = `Are you sure you want to place this order? Total amount is ${formatCurrency(totalAmount.value)}.`;
+  
+  showConfirmModal.value = true;
+};
+
+const submitOrder = async () => {
+  showConfirmModal.value = false;
+  loading.value = true;
+  error.value = null;
+
   try {
-    // Process each item in cart as a separate order
-    const promises = marketplaceStore.cart.map(item => {
-      return marketplaceStore.createOrder({
-        rice_product_id: item.id,
-        quantity: item.quantity,
-        delivery_address: form.value.address,
-        delivery_method: form.value.delivery_method,
-        payment_method: form.value.payment_method,
-        notes: form.value.notes
-      });
+    // Use bulk checkout action
+    await marketplaceStore.checkout({
+      delivery_address: form.value.address,
+      delivery_method: form.value.delivery_method,
+      payment_method: form.value.payment_method,
+      notes: form.value.notes,
+      offer_price: null,
+      preferred_pickup_date: form.value.preferred_pickup_date
     });
 
-    await Promise.all(promises);
-
-    // Success - Only clear cart here after all orders succeed
-    marketplaceStore.clearCart();
+    // Success - Cart is already cleared by the store action
     
     // Show success message or redirect
-    router.push('/marketplace/orders'); // Corrected route to match likely user expectation or existing route
+    router.push('/marketplace/orders');
     
   } catch (err) {
     console.error('Order submission failed:', err);
-    error.value = err.response?.data?.message || 'Failed to place one or more orders. Please try again.';
-    // Note: If some orders succeeded and others failed, the cart is not cleared. 
-    // Ideally we would remove only the successful items, but for now this prevents data loss.
+    error.value = err.response?.data?.message || 'Checkout failed. Please try again.';
   } finally {
     loading.value = false;
   }

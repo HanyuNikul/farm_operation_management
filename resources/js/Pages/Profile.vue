@@ -1,7 +1,7 @@
 <template>
   <div class="profile-page">
     <div class="container mx-auto px-4 py-8">
-      <div class="max-w-4xl mx-auto">
+      <div class="w-full mx-auto">
         <!-- Header -->
         <div class="mb-8">
           <h1 class="text-3xl font-bold text-gray-900">Profile</h1>
@@ -21,18 +21,20 @@
                     <input
                       v-model="profile.first_name"
                       type="text"
-                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      :class="['w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500', errors.first_name ? 'border-red-300' : 'border-gray-300']"
                       required
                     />
+                    <p v-if="errors.first_name" class="mt-1 text-xs text-red-600">{{ errors.first_name }}</p>
                   </div>
                   <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
                     <input
                       v-model="profile.last_name"
                       type="text"
-                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      :class="['w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500', errors.last_name ? 'border-red-300' : 'border-gray-300']"
                       required
                     />
+                    <p v-if="errors.last_name" class="mt-1 text-xs text-red-600">{{ errors.last_name }}</p>
                   </div>
                 </div>
 
@@ -41,9 +43,10 @@
                   <input
                     v-model="profile.email"
                     type="email"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    :class="['w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500', errors.email ? 'border-red-300' : 'border-gray-300']"
                     required
                   />
+                  <p v-if="errors.email" class="mt-1 text-xs text-red-600">{{ errors.email }}</p>
                 </div>
 
                 <div>
@@ -51,8 +54,9 @@
                   <input
                     v-model="profile.phone"
                     type="tel"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    :class="['w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500', errors.phone ? 'border-red-300' : 'border-gray-300']"
                   />
+                  <p v-if="errors.phone" class="mt-1 text-xs text-red-600">{{ errors.phone }}</p>
                 </div>
 
                 <div>
@@ -60,9 +64,10 @@
                   <textarea
                     v-model="profile.bio"
                     rows="4"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    :class="['w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none', errors.bio ? 'border-red-300' : 'border-gray-300']"
                     placeholder="Tell us about yourself..."
                   ></textarea>
+                  <p v-if="errors.bio" class="mt-1 text-xs text-red-600">{{ errors.bio }}</p>
                 </div>
 
                 <div class="flex justify-end">
@@ -131,10 +136,69 @@
             <div class="bg-white rounded-lg shadow-md p-6 mb-6">
               <h3 class="text-lg font-semibold mb-4">Profile Picture</h3>
               <div class="text-center">
-                <div class="w-32 h-32 bg-gray-200 rounded-full mx-auto mb-4 flex items-center justify-center">
-                  <span class="text-4xl text-gray-500">{{ initials }}</span>
+                <!-- Profile Image or Initials -->
+                <div class="relative w-32 h-32 mx-auto mb-4">
+                  <div 
+                    v-if="profilePictureUrl"
+                    class="w-32 h-32 rounded-full overflow-hidden border-4 border-gray-200"
+                  >
+                    <img 
+                      :src="profilePictureUrl" 
+                      alt="Profile picture" 
+                      class="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div 
+                    v-else 
+                    class="w-32 h-32 bg-gray-200 rounded-full flex items-center justify-center border-4 border-gray-200"
+                  >
+                    <span class="text-4xl text-gray-500">{{ initials }}</span>
+                  </div>
+                  
+                  <!-- Upload overlay on hover -->
+                  <label 
+                    class="absolute inset-0 w-32 h-32 rounded-full bg-black bg-opacity-50 flex items-center justify-center cursor-pointer opacity-0 hover:opacity-100 transition-opacity"
+                  >
+                    <span class="text-white text-sm font-medium">
+                      {{ uploadingPicture ? 'Uploading...' : 'Change' }}
+                    </span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      class="hidden"
+                      @change="handlePictureUpload"
+                      :disabled="uploadingPicture"
+                    />
+                  </label>
                 </div>
-                <button class="text-blue-600 hover:text-blue-800 text-sm">Change Picture</button>
+                
+                <!-- Action Buttons -->
+                <div class="space-y-2">
+                  <label 
+                    class="block w-full text-center text-blue-600 hover:text-blue-800 text-sm cursor-pointer font-medium"
+                  >
+                    {{ uploadingPicture ? 'Uploading...' : 'Upload New Picture' }}
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      class="hidden"
+                      @change="handlePictureUpload"
+                      :disabled="uploadingPicture"
+                    />
+                  </label>
+                  <button 
+                    v-if="profilePictureUrl"
+                    @click="deletePicture"
+                    :disabled="deletingPicture"
+                    class="text-red-600 hover:text-red-800 text-sm font-medium disabled:opacity-50"
+                  >
+                    {{ deletingPicture ? 'Removing...' : 'Remove Picture' }}
+                  </button>
+                </div>
+                
+                <p class="text-xs text-gray-500 mt-3">
+                  Recommended: Square image, at least 200x200px. Max 2MB.
+                </p>
               </div>
             </div>
 
@@ -166,10 +230,15 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import axios from 'axios'
+import { useFormValidation } from '@/composables/useFormValidation'
 
 const authStore = useAuthStore()
+const { errors, rules, validateForm, sanitizeForm, clearErrors } = useFormValidation()
 const loading = ref(false)
 const passwordLoading = ref(false)
+const uploadingPicture = ref(false)
+const deletingPicture = ref(false)
 
 const profile = ref({
   first_name: '',
@@ -178,7 +247,8 @@ const profile = ref({
   phone: '',
   bio: '',
   role: '',
-  created_at: ''
+  created_at: '',
+  profile_picture: null
 })
 
 const passwordForm = ref({
@@ -193,20 +263,113 @@ const initials = computed(() => {
   return (first + last).toUpperCase()
 })
 
+const profilePictureUrl = computed(() => {
+  if (profile.value.profile_picture) {
+    // Handle both relative paths and full URLs
+    if (profile.value.profile_picture.startsWith('http')) {
+      return profile.value.profile_picture
+    }
+    return `/storage/${profile.value.profile_picture}`
+  }
+  return null
+})
+
 const formatDate = (date) => {
   if (!date) return ''
   return new Date(date).toLocaleDateString()
 }
 
+const handlePictureUpload = async (event) => {
+  const file = event.target.files?.[0]
+  if (!file) return
+
+  // Validate file size (2MB max)
+  if (file.size > 2 * 1024 * 1024) {
+    alert('File size must be less than 2MB')
+    return
+  }
+
+  // Validate file type
+  if (!file.type.startsWith('image/')) {
+    alert('Please select an image file')
+    return
+  }
+
+  uploadingPicture.value = true
+  try {
+    const formData = new FormData()
+    formData.append('profile_picture', file)
+
+    const response = await axios.post('/api/profile/picture', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+
+    // Update local state
+    profile.value.profile_picture = response.data.user.profile_picture
+    
+    // Update auth store
+    if (authStore.user) {
+      authStore.user.profile_picture = response.data.user.profile_picture
+    }
+
+    alert('Profile picture updated successfully!')
+  } catch (error) {
+    console.error('Failed to upload profile picture:', error)
+    alert(error.response?.data?.message || 'Failed to upload profile picture')
+  } finally {
+    uploadingPicture.value = false
+    // Reset file input
+    event.target.value = ''
+  }
+}
+
+const deletePicture = async () => {
+  if (!confirm('Are you sure you want to remove your profile picture?')) return
+
+  deletingPicture.value = true
+  try {
+    await axios.delete('/api/profile/picture')
+    
+    // Update local state
+    profile.value.profile_picture = null
+    
+    // Update auth store
+    if (authStore.user) {
+      authStore.user.profile_picture = null
+    }
+
+    alert('Profile picture removed successfully!')
+  } catch (error) {
+    console.error('Failed to delete profile picture:', error)
+    alert(error.response?.data?.message || 'Failed to remove profile picture')
+  } finally {
+    deletingPicture.value = false
+  }
+}
+
 const updateProfile = async () => {
+  clearErrors();
+  sanitizeForm(profile.value);
+  
+  const isValid = validateForm(profile.value, {
+    first_name: [rules.required, rules.maxLength(255), rules.alphaSpaces, rules.noEmoji],
+    last_name: [rules.required, rules.maxLength(255), rules.alphaSpaces, rules.noEmoji],
+    email: [rules.required, rules.email, rules.maxLength(255)],
+    phone: [rules.phone, rules.maxLength(20)],
+    bio: [rules.maxLength(1000), rules.noEmoji]
+  });
+
+  if (!isValid) return;
+
   loading.value = true
   try {
-    // API call to update profile
     await authStore.updateProfile(profile.value)
-    // Show success message
+    alert('Profile updated successfully!')
   } catch (error) {
     console.error('Error updating profile:', error)
-    // Show error message
+    alert(error.response?.data?.message || 'Failed to update profile')
   } finally {
     loading.value = false
   }
@@ -214,23 +377,22 @@ const updateProfile = async () => {
 
 const changePassword = async () => {
   if (passwordForm.value.new_password !== passwordForm.value.new_password_confirmation) {
-    // Show error message
+    alert('Passwords do not match')
     return
   }
 
   passwordLoading.value = true
   try {
-    // API call to change password
     await authStore.changePassword(passwordForm.value)
-    // Clear form and show success message
     passwordForm.value = {
       current_password: '',
       new_password: '',
       new_password_confirmation: ''
     }
+    alert('Password changed successfully!')
   } catch (error) {
     console.error('Error changing password:', error)
-    // Show error message
+    alert(error.response?.data?.message || 'Failed to change password')
   } finally {
     passwordLoading.value = false
   }

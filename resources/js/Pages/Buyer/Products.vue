@@ -1,22 +1,18 @@
 <template>
   <div class="min-h-screen bg-gray-50">
-    <!-- Header -->
-    <header class="bg-white shadow-sm border-b border-gray-200">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between items-center py-4">
-          <div>
-            <h1 class="text-2xl font-bold text-gray-900">Rice Products</h1>
-            <p class="text-sm text-gray-600 mt-1">Browse available rice products and pre-order options</p>
-          </div>
+    <div class="container mx-auto px-4 py-8">
+      <!-- Standard Header -->
+      <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+        <div>
+          <h1 class="text-3xl font-bold text-gray-800">Rice Products</h1>
+          <p class="text-gray-500 mt-1">Browse available rice products and pre-order options</p>
         </div>
       </div>
-    </header>
 
-    <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <!-- Main Content -->
       <!-- Filters -->
       <div class="mb-6 bg-white rounded-lg shadow p-4">
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">Search</label>
             <input
@@ -52,6 +48,54 @@
               <option value="available_from">Available Date</option>
             </select>
           </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Quality Grade</label>
+            <select
+              v-model="filters.quality_grade"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              @change="loadProducts"
+            >
+              <option value="">All Grades</option>
+              <option value="grade_a">Grade A (Premium)</option>
+              <option value="grade_b">Grade B</option>
+              <option value="commercial">Commercial</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Min Price (₱)</label>
+            <input
+              v-model.number="filters.min_price"
+              type="number"
+              min="0"
+              placeholder="Min"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              @change="loadProducts"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Max Price (₱)</label>
+            <input
+              v-model.number="filters.max_price"
+              type="number"
+              min="0"
+              placeholder="Max"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              @change="loadProducts"
+            />
+          </div>
+          <div class="flex items-end">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                v-model="filters.is_organic"
+                @change="loadProducts"
+                class="w-4 h-4 text-green-600 rounded"
+              />
+              <span class="text-sm font-medium text-gray-700">Organic Only</span>
+            </label>
+          </div>
           <div class="flex items-end">
             <button
               @click="resetFilters"
@@ -63,6 +107,7 @@
         </div>
       </div>
 
+
       <!-- Loading State -->
       <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div v-for="n in 8" :key="n" class="bg-white rounded-lg shadow p-6 animate-pulse">
@@ -73,51 +118,59 @@
       </div>
 
       <!-- Products Grid -->
-      <div v-else-if="products.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div v-else-if="products.length > 0" class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         <div
           v-for="product in products"
           :key="product.id"
           class="bg-white rounded-lg shadow hover:shadow-md transition-shadow cursor-pointer"
           @click="viewProduct(product.id)"
         >
-          <div class="p-6">
-            <!-- Product Image/Icon -->
-            <div class="h-48 bg-gradient-to-br from-green-100 to-emerald-100 rounded-lg mb-4 flex items-center justify-center">
-              <span class="text-6xl">🌾</span>
+          <div class="p-3 md:p-6">
+            <!-- Product Image -->
+            <div class="aspect-square bg-gradient-to-br from-green-100 to-emerald-100 rounded-lg mb-3 md:mb-4 overflow-hidden">
+              <img
+                v-if="product.images && product.images.length > 0"
+                :src="product.images[0]"
+                :alt="product.name"
+                class="w-full h-full object-cover"
+              />
+              <div v-else class="w-full h-full flex items-center justify-center">
+                <span class="text-4xl md:text-6xl">🌾</span>
+              </div>
             </div>
 
             <!-- Product Info -->
-            <h3 class="font-semibold text-gray-900 mb-2 line-clamp-2">{{ product.name }}</h3>
-            <p class="text-sm text-gray-600 mb-3 line-clamp-2">{{ product.description }}</p>
+            <h3 class="font-semibold text-gray-900 mb-1 md:mb-2 line-clamp-2 text-sm md:text-base">{{ product.name }}</h3>
+            <p class="text-xs md:text-sm text-gray-600 mb-2 md:mb-3 line-clamp-2 hidden md:block">{{ product.description }}</p>
 
             <!-- Production Status Badge -->
-            <div class="mb-3">
+            <div class="mb-2 md:mb-3">
               <span
                 v-if="product.production_status === 'in_production'"
-                class="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800"
+                class="inline-flex px-1.5 md:px-2 py-0.5 md:py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800"
               >
-                Pre-order Available
+                Pre-order
               </span>
               <span
                 v-else-if="product.production_status === 'available'"
-                class="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800"
+                class="inline-flex px-1.5 md:px-2 py-0.5 md:py-1 text-xs font-medium rounded-full bg-green-100 text-green-800"
               >
-                Available Now
+                Available
               </span>
             </div>
 
             <!-- Available From (for pre-orders) -->
-            <div v-if="product.production_status === 'in_production' && product.available_from" class="mb-3">
+            <div v-if="product.production_status === 'in_production' && product.available_from" class="mb-2 md:mb-3 hidden md:block">
               <p class="text-xs text-gray-500">
                 Available from: {{ formatDate(product.available_from) }}
               </p>
             </div>
 
             <!-- Stock Info -->
-            <div class="mb-3">
+            <div class="mb-2 md:mb-3 hidden md:block">
               <p class="text-sm text-gray-600">
                 <span v-if="product.production_status === 'available'">
-                  Stock: {{ product.quantity_available }} {{ product.unit }}
+                  Stock: {{ product.quantity_available }} {{ formatUnit(product.unit) }}
                 </span>
                 <span v-else>
                   Pre-order now
@@ -126,11 +179,11 @@
             </div>
 
             <!-- Price -->
-            <div class="flex justify-between items-center mb-4">
-              <span class="text-lg font-bold text-green-600">
-                {{ formatCurrency(product.price_per_unit) }}/{{ product.unit }}
+            <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-3 md:mb-4">
+              <span class="text-sm md:text-lg font-bold text-green-600">
+                {{ formatCurrency(product.price_per_unit) }}/{{ formatUnit(product.unit) }}
               </span>
-              <div v-if="product.average_rating > 0" class="flex items-center">
+              <div v-if="product.average_rating > 0" class="flex items-center hidden md:flex">
                 <span class="text-yellow-400 text-sm">★</span>
                 <span class="text-sm text-gray-600 ml-1">{{ product.average_rating.toFixed(1) }}</span>
               </div>
@@ -139,9 +192,9 @@
             <!-- Action Button -->
             <button
               @click.stop="viewProduct(product.id)"
-              class="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors"
+              class="w-full bg-green-600 text-white py-2 px-3 md:px-4 rounded-lg hover:bg-green-700 transition-colors text-sm md:text-base"
             >
-              {{ product.production_status === 'in_production' ? 'Pre-order Now' : 'View Details' }}
+              {{ product.production_status === 'in_production' ? 'Pre-order' : 'View' }}
             </button>
           </div>
         </div>
@@ -178,7 +231,7 @@
           </button>
         </nav>
       </div>
-    </main>
+    </div>
   </div>
 </template>
 
@@ -186,7 +239,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
-import { formatCurrency } from '@/utils/format'
+import { formatCurrency, formatUnit } from '@/utils/format'
 
 const router = useRouter()
 
@@ -197,6 +250,10 @@ const pagination = ref(null)
 const filters = ref({
   search: '',
   production_status: '',
+  quality_grade: '',
+  min_price: null,
+  max_price: null,
+  is_organic: false,
   sort_by: 'created_at',
   sort_order: 'desc',
   page: 1
@@ -232,6 +289,22 @@ const loadProducts = async (page = 1) => {
       params.production_status = filters.value.production_status
     }
 
+    if (filters.value.quality_grade) {
+      params.quality_grade = filters.value.quality_grade
+    }
+
+    if (filters.value.min_price) {
+      params.min_price = filters.value.min_price
+    }
+
+    if (filters.value.max_price) {
+      params.max_price = filters.value.max_price
+    }
+
+    if (filters.value.is_organic) {
+      params.is_organic = 1
+    }
+
     const response = await axios.get('/api/rice-marketplace/products', { params })
     
     products.value = response.data.products.data || response.data.products
@@ -260,12 +333,17 @@ const resetFilters = () => {
   filters.value = {
     search: '',
     production_status: '',
+    quality_grade: '',
+    min_price: null,
+    max_price: null,
+    is_organic: false,
     sort_by: 'created_at',
     sort_order: 'desc',
     page: 1
   }
   loadProducts()
 }
+
 
 const viewProduct = (productId) => {
   router.push(`/buyer/products/${productId}`)

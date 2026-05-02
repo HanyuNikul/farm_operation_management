@@ -11,6 +11,7 @@ class Sale extends Model
         'harvest_id',
         'buyer_id',
         'user_id',
+        'rice_order_id', // Link to marketplace order
         'quantity',
         'unit_price',
         'total_amount',
@@ -35,23 +36,31 @@ class Sale extends Model
     /**
      * Get the harvest that was sold
      */
-    public function harvest()
+    public function harvest(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(Harvest::class);
     }
 
     /**
-     * Get the buyer
+     * Get the buyer (for off-platform sales)
      */
-    public function buyer()
+    public function buyer(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(Buyer::class, 'buyer_id');
     }
 
     /**
+     * Get the rice order (for marketplace sales)
+     */
+    public function riceOrder(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(RiceOrder::class);
+    }
+
+    /**
      * The farmer/farm owner who created the sale
      */
-    public function user()
+    public function user(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(User::class);
     }

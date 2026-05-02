@@ -4,8 +4,17 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
 class Field extends Model
 {
+    use HasFactory;
+
+    /**
+     * @property int $id
+     * @property array|null $location
+     * @property array|null $field_coordinates
+     */
 
     protected $fillable = [
         'user_id',
@@ -29,6 +38,11 @@ class Field extends Model
         'previous_crop',
         'field_preparation_status',
         'notes',
+        'nickname',
+        'planting_method',
+        'cropping_seasons',
+        'target_yield',
+        'infrastructure_notes',
     ];
 
     protected $casts = [
@@ -42,14 +56,19 @@ class Field extends Model
         'potassium_level' => 'decimal:2',
         'elevation' => 'decimal:2',
         'slope' => 'decimal:2',
+        'target_yield' => 'decimal:2',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+    ];
+
+    protected $appends = [
+        'available_area',
     ];
 
     /**
      * Get the user that owns the field
      */
-    public function user()
+    public function user(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(User::class);
     }
@@ -57,33 +76,33 @@ class Field extends Model
     /**
      * Get the plantings for this field
      */
-    public function plantings()
+    public function plantings(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(Planting::class);
     }
 
     /**
-     * Get the weather logs for this field
-     */
-    public function weatherLogs()
-    {
-        return $this->hasMany(WeatherLog::class);
-    }
-
-    /**
-     * Get the latest weather log
-     */
-    public function latestWeather()
-    {
-        return $this->hasOne(WeatherLog::class)->latest('recorded_at');
-    }
-
-    /**
      * Get the farm that owns this field
      */
-    public function farm()
+    public function farm(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(Farm::class);
+    }
+
+    /**
+     * Convenience: get weather from the parent farm
+     */
+    public function getWeatherFromFarm(): ?WeatherLog
+    {
+        return $this->farm?->latestWeather;
+    }
+
+    /**
+     * Accessor for latestWeather to maintain backward compatibility
+     */
+    public function getLatestWeatherAttribute(): ?WeatherLog
+    {
+        return $this->getWeatherFromFarm();
     }
 
     /**
@@ -91,8 +110,21 @@ class Field extends Model
      */
     public function getCurrentRicePlanting()
     {
+        if ($this->relationLoaded('plantings')) {
+            return $this->plantings
+                ->filter(function ($p) {
+                    return $p->crop_type === 'rice' || $p->rice_variety_id !== null;
+                })
+                ->whereIn('status', ['planted', 'growing'])
+                ->sortByDesc('planting_date')
+                ->first();
+        }
+
         return $this->plantings()
-            ->where('crop_type', 'rice')
+            ->where(function ($q) {
+                $q->where('crop_type', 'rice')
+                    ->orWhereNotNull('rice_variety_id');
+            })
             ->whereIn('status', ['planted', 'growing'])
             ->with('riceVariety')
             ->latest('planting_date')
@@ -105,14 +137,14 @@ class Field extends Model
     public function isSuitableForRice()
     {
         // Rice typically grows well in pH 5.5-7.0
-        $phSuitable = $this->soil_ph >= 5.5 && $this->soil_ph <= 7.0;
-        
+        $phSuitable = $this->soil_ph === null || ($this->soil_ph >= 5.5 && $this->soil_ph <= 7.0);
+
         // Need good water access for rice
         $waterSuitable = $this->water_access === 'good' || $this->water_access === 'excellent';
-        
+
         // Drainage should be controllable for rice
         $drainageSuitable = in_array($this->drainage_quality, ['good', 'moderate']);
-        
+
         return $phSuitable && $waterSuitable && $drainageSuitable;
     }
 
@@ -122,9 +154,11 @@ class Field extends Model
     public function getSoilFertilityStatus()
     {
         $scores = [];
-        
+
         // pH score (optimal 6.0-6.8 for rice)
-        if ($this->soil_ph >= 6.0 && $this->soil_ph <= 6.8) {
+        if ($this->soil_ph === null) {
+            $scores['ph'] = 'unknown';
+        } elseif ($this->soil_ph >= 6.0 && $this->soil_ph <= 6.8) {
             $scores['ph'] = 'optimal';
         } elseif ($this->soil_ph >= 5.5 && $this->soil_ph <= 7.2) {
             $scores['ph'] = 'good';
@@ -133,7 +167,9 @@ class Field extends Model
         }
 
         // Organic matter (>2% is good)
-        if ($this->organic_matter_content >= 2.0) {
+        if ($this->organic_matter_content === null) {
+            $scores['organic_matter'] = 'unknown';
+        } elseif ($this->organic_matter_content >= 2.0) {
             $scores['organic_matter'] = 'good';
         } elseif ($this->organic_matter_content >= 1.0) {
             $scores['organic_matter'] = 'moderate';
@@ -154,9 +190,14 @@ class Field extends Model
      */
     private function assessNutrientLevel($level)
     {
-        if ($level >= 30) return 'high';
-        if ($level >= 15) return 'medium';
-        if ($level >= 5) return 'low';
+        if ($level === null)
+            return 'unknown';
+        if ($level >= 30)
+            return 'high';
+        if ($level >= 15)
+            return 'medium';
+        if ($level >= 5)
+            return 'low';
         return 'very_low';
     }
 
@@ -166,7 +207,7 @@ class Field extends Model
     public function getRecommendedRiceVarieties()
     {
         $currentSeason = (now()->month >= 5 && now()->month <= 10) ? 'wet' : 'dry';
-        
+
         return RiceVariety::active()
             ->bySeason($currentSeason)
             ->get()
@@ -175,12 +216,12 @@ class Field extends Model
                 if (!$this->isSuitableForRice()) {
                     return false;
                 }
-                
+
                 // Filter by resistance level if soil conditions are challenging
-                if ($this->soil_ph < 5.8 || $this->soil_ph > 7.0) {
+                if ($this->soil_ph !== null && ($this->soil_ph < 5.8 || $this->soil_ph > 7.0)) {
                     return $variety->resistance_level === 'high';
                 }
-                
+
                 return true;
             });
     }
@@ -194,7 +235,9 @@ class Field extends Model
         $maxScore = 100;
 
         // Soil pH (20 points)
-        if ($this->soil_ph >= 6.0 && $this->soil_ph <= 6.8) {
+        if ($this->soil_ph === null) {
+            $score += 10; // Neutral score for missing data
+        } elseif ($this->soil_ph >= 6.0 && $this->soil_ph <= 6.8) {
             $score += 20;
         } elseif ($this->soil_ph >= 5.5 && $this->soil_ph <= 7.2) {
             $score += 15;
@@ -234,6 +277,10 @@ class Field extends Model
         $fertility = $this->getSoilFertilityStatus();
         $fertilityScore = 0;
         foreach (['nitrogen', 'phosphorus', 'potassium'] as $nutrient) {
+            if (!isset($fertility[$nutrient]) || $fertility[$nutrient] === 'unknown') {
+                $fertilityScore += 3; // Neutral assume low-avg
+                continue;
+            }
             switch ($fertility[$nutrient]) {
                 case 'high':
                 case 'medium':
@@ -249,7 +296,9 @@ class Field extends Model
         $score += min($fertilityScore + 10, 25); // Base 10 + up to 15 from nutrients
 
         // Organic matter (15 points)
-        if ($this->organic_matter_content >= 3.0) {
+        if ($this->organic_matter_content === null) {
+            $score += 8; // Neutral score
+        } elseif ($this->organic_matter_content >= 3.0) {
             $score += 15;
         } elseif ($this->organic_matter_content >= 2.0) {
             $score += 12;
@@ -296,11 +345,11 @@ class Field extends Model
         if ($fertility['nitrogen'] === 'low' || $fertility['nitrogen'] === 'very_low') {
             $recommendations[] = 'Apply nitrogen fertilizer before planting';
         }
-        
+
         if ($fertility['phosphorus'] === 'low' || $fertility['phosphorus'] === 'very_low') {
             $recommendations[] = 'Apply phosphorus fertilizer to improve root development';
         }
-        
+
         if ($fertility['potassium'] === 'low' || $fertility['potassium'] === 'very_low') {
             $recommendations[] = 'Apply potassium fertilizer for better disease resistance';
         }
@@ -315,5 +364,19 @@ class Field extends Model
         }
 
         return $recommendations;
+    }
+    /**
+     * Get available area for planting
+     */
+    public function getAvailableAreaAttribute()
+    {
+        // Calculate used area from active plantings
+        $usedArea = $this->plantings
+            ->filter(function ($planting) {
+                return in_array($planting->status, ['planned', 'planted', 'growing', 'ready']);
+            })
+            ->sum('area_planted');
+
+        return max(0, $this->size - $usedArea);
     }
 }

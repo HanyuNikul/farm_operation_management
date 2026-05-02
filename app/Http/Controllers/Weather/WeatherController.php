@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Weather;
 
 use App\Http\Controllers\Controller;
+use App\Models\Farm;
 use App\Models\Field;
 use App\Models\WeatherLog;
 use App\Services\WeatherService;
@@ -24,117 +25,119 @@ class WeatherController extends Controller
     }
 
     /**
-     * Get current weather for a field
+     * Get current weather for a farm
      */
-    public function getCurrentWeather(Request $request, Field $field): JsonResponse
+    public function getCurrentWeather(Request $request, Farm $farm): JsonResponse
     {
-        // Check if user can access this field
+        // Check if user can access this farm
         $user = $request->user();
-        if ($field->user_id !== $user->id) {
+        if ($farm->user_id !== $user->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        // Get coordinates from location or fallback to field_coordinates
-        $lat = null;
-        $lon = null;
-        
-        if (isset($field->location['lat']) && isset($field->location['lon'])) {
-            $lat = (float) $field->location['lat'];
-            $lon = (float) $field->location['lon'];
-        } elseif (isset($field->field_coordinates['lat']) && isset($field->field_coordinates['lon'])) {
-            // Fallback to field_coordinates if location doesn't have coordinates
-            $lat = (float) $field->field_coordinates['lat'];
-            $lon = (float) $field->field_coordinates['lon'];
-        }
-        
+        // Get coordinates from farm weather coordinates
+        $coords = $farm->weather_coordinates;
+        $lat = $coords['lat'] ?? null;
+        $lon = $coords['lon'] ?? null;
+
         if ($lat === null || $lon === null) {
             return response()->json([
-                'message' => 'Field location coordinates are required'
+                'message' => 'Farm location coordinates are required'
             ], 400);
         }
 
-        try {
-            $weatherData = $this->weatherService->getCurrentWeather($lat, $lon);
-        } catch (WeatherServiceException $e) {
-            return response()->json([
-                'message' => $e->getMessage()
-            ], 400);
-        } catch (\Exception $e) {
-            return response()->json([
-                'message' => 'Unable to fetch weather data: ' . $e->getMessage()
-            ], 500);
-        }
+        // First, check if we have a fresh weather log (within last 30 minutes)
+        // This acts as a first-level cache using the database
+        $recencyThreshold = now()->subMinutes(30);
+        $recentLog = $farm->weatherLogs()
+            ->where('recorded_at', '>=', $recencyThreshold)
+            ->orderBy('recorded_at', 'desc')
+            ->first();
 
-        if (!$weatherData || !isset($weatherData['main'])) {
-            return response()->json([
-                'message' => 'Unable to fetch weather data'
-            ], 500);
-        }
+        if ($recentLog) {
+            // Use existing log
+            $weatherLog = $recentLog;
 
-        // Save weather data to database
-        $weatherLog = $this->weatherService->updateFieldWeather($field, $weatherData);
+            // Set relation for subsequent usage
+            $farm->setRelation('latestWeather', $weatherLog);
+        } else {
+            // Fetch fresh data from service (which has its own cache)
+            try {
+                $weatherData = $this->weatherService->getCurrentWeather($lat, $lon);
+            } catch (WeatherServiceException $e) {
+                return response()->json([
+                    'message' => $e->getMessage()
+                ], 400);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'message' => 'Unable to fetch weather data: ' . $e->getMessage()
+                ], 500);
+            }
 
-        if (!$weatherLog) {
-            return response()->json([
-                'message' => 'Failed to store weather data'
-            ], 500);
+            if (!$weatherData || !isset($weatherData['main'])) {
+                return response()->json([
+                    'message' => 'Unable to fetch weather data'
+                ], 500);
+            }
+
+            // Save weather data to database
+            $weatherLog = $this->weatherService->updateFarmWeather($farm, $weatherData);
+
+            if (!$weatherLog) {
+                return response()->json([
+                    'message' => 'Failed to store weather data'
+                ], 500);
+            }
         }
 
         return response()->json([
-            'field' => $field,
-            'weather' => $this->weatherService->formatWeatherLog($field->latestWeather ?? $weatherLog),
-            'alerts' => $this->weatherService->getWeatherAlerts($field)
+            'farm' => $farm,
+            'weather' => $this->weatherService->formatWeatherLog($farm->latestWeather ?? $weatherLog),
+            'alerts' => $this->weatherService->getWeatherAlerts($farm)
         ]);
     }
 
     /**
-     * Get weather forecast for a field
+     * Get weather forecast for a farm
      */
-    public function getForecast(Request $request, Field $field): JsonResponse
+    public function getForecast(Request $request, Farm $farm): JsonResponse
     {
-        // Check if user can access this field
+        // Check if user can access this farm
         $user = $request->user();
-        if ($field->user_id !== $user->id) {
+        if ($farm->user_id !== $user->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        // Get coordinates from location or fallback to field_coordinates
-        $lat = null;
-        $lon = null;
-        
-        if (isset($field->location['lat']) && isset($field->location['lon'])) {
-            $lat = (float) $field->location['lat'];
-            $lon = (float) $field->location['lon'];
-        } elseif (isset($field->field_coordinates['lat']) && isset($field->field_coordinates['lon'])) {
-            // Fallback to field_coordinates if location doesn't have coordinates
-            $lat = (float) $field->field_coordinates['lat'];
-            $lon = (float) $field->field_coordinates['lon'];
-        }
-        
+        // Get coordinates from farm
+        $coords = $farm->weather_coordinates;
+        $lat = $coords['lat'] ?? null;
+        $lon = $coords['lon'] ?? null;
+
         if ($lat === null || $lon === null) {
             return response()->json([
-                'message' => 'Field location coordinates are required'
+                'message' => 'Farm location coordinates are required'
             ], 400);
         }
 
         $days = $request->get('days', 7);
-        if ($days > 7) $days = 7; // Limit to 7 days
+        if ($days > 14)
+            $days = 14; // Limit to 14 days
 
         // Use ColorfulClouds for forecasts (supports up to 10 days, better than OpenWeatherMap's 5 days)
         // Request one extra day to ensure we get the full requested number (API might exclude today)
         try {
             $forecastData = $this->colorfulCloudsService->getForecast($lat, $lon, $days + 1, 'metric', 'en_US');
-            
+
             if (empty($forecastData)) {
                 // Fallback to OpenWeatherMap if ColorfulClouds fails
                 $forecastData = $this->weatherService->getForecast($lat, $lon, $days);
-                
+
                 if (!$forecastData || !isset($forecastData['list'])) {
                     return response()->json([
                         'message' => 'Unable to fetch forecast data'
                     ], 500);
                 }
-                
+
                 // Process OpenWeatherMap forecast data to daily format
                 $dailyForecasts = $this->processForecastToDaily($forecastData['list'], $days);
             } else {
@@ -144,37 +147,37 @@ class WeatherController extends Controller
         } catch (\Exception $e) {
             // Fallback to OpenWeatherMap on error
             $forecastData = $this->weatherService->getForecast($lat, $lon, $days);
-            
+
             if (!$forecastData || !isset($forecastData['list'])) {
                 return response()->json([
                     'message' => 'Unable to fetch forecast data: ' . $e->getMessage()
                 ], 500);
             }
-            
+
             $dailyForecasts = $this->processForecastToDaily($forecastData['list'], $days);
         }
 
         return response()->json([
-            'field' => $field,
+            'farm' => $farm,
             'forecast' => $dailyForecasts
         ]);
     }
 
     /**
-     * Get weather history for a field
+     * Get weather history for a farm
      */
-    public function getHistory(Request $request, Field $field): JsonResponse
+    public function getHistory(Request $request, Farm $farm): JsonResponse
     {
-        // Check if user can access this field
+        // Check if user can access this farm
         $user = $request->user();
-        if ($field->user_id !== $user->id) {
+        if ($farm->user_id !== $user->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
         $validator = Validator::make($request->all(), [
-            'days' => 'integer|min:1|max:365',
+            'days' => 'integer|min:1|max:1200',
             'page' => 'integer|min:1',
-            'per_page' => 'integer|min:1|max:100'
+            'per_page' => 'integer|min:1|max:5000'
         ]);
 
         if ($validator->fails()) {
@@ -184,54 +187,54 @@ class WeatherController extends Controller
             ], 422);
         }
 
-        $days = $request->get('days', 30);
-        $perPage = $request->get('per_page', 20);
+        $days = (int) $request->get('days', 30);
+        $perPage = (int) $request->get('per_page', 5000);
 
-        $weatherLogs = WeatherLog::where('field_id', $field->id)
+        $weatherLogs = WeatherLog::where('farm_id', $farm->id)
             ->where('recorded_at', '>=', now()->subDays($days))
             ->orderBy('recorded_at', 'desc')
             ->paginate($perPage);
 
-        $stats = $this->weatherService->getFieldWeatherStats($field, $days);
+        $stats = $this->weatherService->getFarmWeatherStats($farm, $days);
 
         return response()->json([
-            'field' => $field,
+            'farm' => $farm,
             'weather_logs' => $weatherLogs,
             'stats' => $stats
         ]);
     }
 
     /**
-     * Get weather alerts for a field
+     * Get weather alerts for a farm
      */
-    public function getAlerts(Request $request, Field $field): JsonResponse
+    public function getAlerts(Request $request, Farm $farm): JsonResponse
     {
-        // Check if user can access this field
+        // Check if user can access this farm
         $user = $request->user();
-        if ($field->user_id !== $user->id) {
+        if ($farm->user_id !== $user->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $alerts = $this->weatherService->getWeatherAlerts($field);
+        $alerts = $this->weatherService->getWeatherAlerts($farm);
 
         return response()->json([
-            'field' => $field,
+            'farm' => $farm,
             'alerts' => $alerts
         ]);
     }
 
     /**
-     * Update weather data for a field
+     * Update weather data for a farm
      */
-    public function updateWeather(Request $request, Field $field): JsonResponse
+    public function updateWeather(Request $request, Farm $farm): JsonResponse
     {
-        // Check if user can access this field
+        // Check if user can access this farm
         $user = $request->user();
-        if ($field->user_id !== $user->id) {
+        if ($farm->user_id !== $user->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $weatherLog = $this->weatherService->updateFieldWeather($field);
+        $weatherLog = $this->weatherService->updateFarmWeather($farm);
 
         if (!$weatherLog) {
             return response()->json([
@@ -241,30 +244,30 @@ class WeatherController extends Controller
 
         return response()->json([
             'message' => 'Weather data updated successfully',
-            'field' => $field,
-            'latest_weather' => $this->weatherService->formatWeatherLog($field->latestWeather ?? $weatherLog),
-            'alerts' => $this->weatherService->getWeatherAlerts($field)
+            'farm' => $farm,
+            'latest_weather' => $this->weatherService->formatWeatherLog($farm->latestWeather ?? $weatherLog),
+            'alerts' => $this->weatherService->getWeatherAlerts($farm)
         ]);
     }
 
     /**
-     * Update weather data for all user's fields
+     * Update weather data for all user's farms
      */
     public function updateAllWeather(Request $request): JsonResponse
     {
         $user = $request->user();
 
-        $fields = Field::where('user_id', $user->id)->get();
+        $farms = Farm::where('user_id', $user->id)->get();
         $updated = 0;
 
-        foreach ($fields as $field) {
-            if ($this->weatherService->updateFieldWeather($field)) {
+        foreach ($farms as $farm) {
+            if ($this->weatherService->updateFarmWeather($farm)) {
                 $updated++;
             }
         }
 
         return response()->json([
-            'message' => "Weather data updated for {$updated} fields",
+            'message' => "Weather data updated for {$updated} farms",
             'updated_count' => $updated
         ]);
     }
@@ -276,28 +279,29 @@ class WeatherController extends Controller
     {
         $user = $request->user();
 
-        $fields = Field::where('user_id', $user->id)
-            ->with('latestWeather')
+        $farms = Farm::where('user_id', $user->id)
+            ->with(['latestWeather', 'fields'])
             ->get();
 
         $dashboardData = [
-            'total_fields' => $fields->count(),
-            'fields_with_weather' => $fields->filter(fn($field) => $field->latestWeather)->count(),
+            'total_farms' => $farms->count(),
+            'total_fields' => $farms->sum(fn($farm) => $farm->fields->count()),
+            'farms_with_weather' => $farms->filter(fn($farm) => $farm->latestWeather)->count(),
             'weather_alerts' => [],
-            'field_weather' => []
+            'farm_weather' => []
         ];
 
-        foreach ($fields as $field) {
-            if ($field->latestWeather) {
-                $alerts = $this->weatherService->getWeatherAlerts($field);
+        foreach ($farms as $farm) {
+            if ($farm->latestWeather) {
+                $alerts = $this->weatherService->getWeatherAlerts($farm);
                 $dashboardData['weather_alerts'] = array_merge(
                     $dashboardData['weather_alerts'],
-                    array_map(fn($alert) => array_merge($alert, ['field' => $field->name ?? "Field {$field->id}"]), $alerts)
+                    array_map(fn($alert) => array_merge($alert, ['farm' => $farm->name ?? "Farm {$farm->id}"]), $alerts)
                 );
 
-                $dashboardData['field_weather'][] = [
-                    'field' => $field,
-                    'weather' => $this->weatherService->formatWeatherLog($field->latestWeather),
+                $dashboardData['farm_weather'][] = [
+                    'farm' => $farm,
+                    'weather' => $this->weatherService->formatWeatherLog($farm->latestWeather),
                     'alerts_count' => count($alerts)
                 ];
             }
@@ -307,13 +311,13 @@ class WeatherController extends Controller
     }
 
     /**
-     * Get rice-specific weather analytics for a field
+     * Get rice-specific weather analytics for a farm
      */
-    public function getRiceAnalytics(Request $request, Field $field): JsonResponse
+    public function getRiceAnalytics(Request $request, Farm $farm): JsonResponse
     {
-        // Check if user can access this field
+        // Check if user can access this farm
         $user = $request->user();
-        if ($field->user_id !== $user->id) {
+        if ($farm->user_id !== $user->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -331,11 +335,11 @@ class WeatherController extends Controller
         $days = $request->get('days', 30);
 
         try {
-            $analytics = $this->weatherService->getRiceWeatherAnalytics($field, $days);
-            $recommendations = $this->weatherService->getRiceFarmingRecommendations($field);
+            $analytics = $this->weatherService->getRiceWeatherAnalytics($farm, $days);
+            $recommendations = $this->weatherService->getRiceFarmingRecommendations($farm);
 
             return response()->json([
-                'field' => $field,
+                'farm' => $farm,
                 'analytics' => $analytics,
                 'recommendations' => $recommendations,
                 'period_days' => $days
@@ -356,7 +360,7 @@ class WeatherController extends Controller
         $user = $request->user();
 
         $fields = Field::where('user_id', $user->id)
-            ->with(['latestWeather', 'plantings.riceVariety'])
+            ->with(['farm.latestWeather', 'plantings.riceVariety'])
             ->get();
 
         $dashboardData = [
@@ -376,38 +380,40 @@ class WeatherController extends Controller
         foreach ($fields as $field) {
             $currentPlanting = $field->getCurrentRicePlanting();
             $isRiceField = $currentPlanting !== null;
-            
+
             if ($isRiceField) {
                 $dashboardData['rice_fields']++;
                 $dashboardData['active_plantings']++;
             }
 
-            if ($field->latestWeather) {
-                $alerts = $this->weatherService->getWeatherAlerts($field);
+            // Access weather via farm
+            $farm = $field->farm;
+            if ($farm && $farm->latestWeather) {
+                $alerts = $this->weatherService->getWeatherAlerts($farm);
                 $riceAlerts = array_filter($alerts, fn($alert) => isset($alert['rice_specific']) && $alert['rice_specific']);
-                
+
                 $dashboardData['weather_alerts'] = array_merge(
                     $dashboardData['weather_alerts'],
                     array_map(fn($alert) => array_merge($alert, ['field' => $field->name ?? "Field {$field->id}"]), $riceAlerts)
                 );
 
-                // Get rice analytics for the field
+                // Get rice analytics for the field (using farm weather)
                 if ($isRiceField) {
                     try {
-                        $analytics = $this->weatherService->getRiceWeatherAnalytics($field, 7);
+                        $analytics = $this->weatherService->getRiceWeatherAnalytics($farm, 7);
                         if (isset($analytics['rice_analytics'])) {
                             $riceAnalytics = $analytics['rice_analytics'];
-                            
+
                             $dashboardData['rice_analytics_summary']['total_growing_degree_days'] += $riceAnalytics['growing_degree_days'] ?? 0;
-                            
+
                             if (($riceAnalytics['heat_stress_days'] ?? 0) > 0) {
                                 $dashboardData['rice_analytics_summary']['heat_stress_fields']++;
                             }
-                            
+
                             if (($riceAnalytics['weather_suitability_score'] ?? 0) >= 70) {
                                 $dashboardData['rice_analytics_summary']['optimal_conditions_fields']++;
                             }
-                            
+
                             if (($riceAnalytics['disease_risk_days'] ?? 0) > 2) {
                                 $dashboardData['rice_analytics_summary']['disease_risk_fields']++;
                             }
@@ -437,21 +443,24 @@ class WeatherController extends Controller
     private function processForecastToDaily(array $forecastList, int $days): array
     {
         $dailyForecasts = [];
-        $today = new \DateTime('today');
+        $today = \Carbon\Carbon::today('Asia/Manila');
         $todayStr = $today->format('Y-m-d');
-        
+
         foreach ($forecastList as $forecast) {
             if (!isset($forecast['dt']) || !isset($forecast['main']) || !isset($forecast['weather'][0])) {
                 continue;
             }
-            
-            $forecastDate = date('Y-m-d', $forecast['dt']);
-            
+
+            // Use Carbon with Asia/Manila timezone to ensure consistent date comparison
+            $forecastDate = \Carbon\Carbon::createFromTimestamp($forecast['dt'])
+                ->setTimezone('Asia/Manila')
+                ->format('Y-m-d');
+
             // Skip past dates - only include today and future dates
             if ($forecastDate < $todayStr) {
                 continue;
             }
-            
+
             if (!isset($dailyForecasts[$forecastDate])) {
                 $dailyForecasts[$forecastDate] = [
                     'date' => $forecastDate,
@@ -475,43 +484,73 @@ class WeatherController extends Controller
                     'code' => 0,
                     'humidity' => 0,
                     'icon' => '🌤️',
-                    'count' => 0 // Track number of forecasts for this day
+                    'count' => 0, // Track number of forecasts for this day
+                    'hourly' => []
                 ];
             }
-            
+
             // Keep temperature in Celsius (API returns metric/Celsius)
             $tempC = $forecast['main']['temp'] ?? 0;
-            
-            $dailyForecasts[$forecastDate]['high'] = max($dailyForecasts[$forecastDate]['high'], $tempC);
-            $dailyForecasts[$forecastDate]['low'] = min($dailyForecasts[$forecastDate]['low'], $tempC);
-            $dailyForecasts[$forecastDate]['temperature_max'] = max($dailyForecasts[$forecastDate]['temperature_max'], $tempC);
-            $dailyForecasts[$forecastDate]['temperature_min'] = min($dailyForecasts[$forecastDate]['temperature_min'], $tempC);
-            $dailyForecasts[$forecastDate]['max_temp'] = max($dailyForecasts[$forecastDate]['max_temp'], $tempC);
-            $dailyForecasts[$forecastDate]['min_temp'] = min($dailyForecasts[$forecastDate]['min_temp'], $tempC);
-            
-            // Get most common condition (use the first one for now, could be improved)
-            if (empty($dailyForecasts[$forecastDate]['condition'])) {
-                $dailyForecasts[$forecastDate]['condition'] = $forecast['weather'][0]['main'] ?? 'Clear';
-                $dailyForecasts[$forecastDate]['weather'] = $forecast['weather'][0]['main'] ?? 'Clear';
-                $dailyForecasts[$forecastDate]['description'] = $forecast['weather'][0]['description'] ?? 'Clear skies';
-                $dailyForecasts[$forecastDate]['weather_description'] = $forecast['weather'][0]['description'] ?? 'Clear skies';
+            $tempMaxInput = $forecast['main']['temp_max'] ?? $tempC;
+            $tempMinInput = $forecast['main']['temp_min'] ?? $tempC;
+
+            $dailyForecasts[$forecastDate]['high'] = max($dailyForecasts[$forecastDate]['high'], $tempMaxInput);
+            $dailyForecasts[$forecastDate]['low'] = min($dailyForecasts[$forecastDate]['low'], $tempMinInput);
+            $dailyForecasts[$forecastDate]['temperature_max'] = max($dailyForecasts[$forecastDate]['temperature_max'], $tempMaxInput);
+            $dailyForecasts[$forecastDate]['temperature_min'] = min($dailyForecasts[$forecastDate]['temperature_min'], $tempMinInput);
+            $dailyForecasts[$forecastDate]['max_temp'] = max($dailyForecasts[$forecastDate]['max_temp'], $tempMaxInput);
+            $dailyForecasts[$forecastDate]['min_temp'] = min($dailyForecasts[$forecastDate]['min_temp'], $tempMinInput);
+
+            // Preserve hourly data if available (from Open-Meteo service)
+            if (isset($forecast['hourly'])) {
+                $dailyForecasts[$forecastDate]['hourly'] = $forecast['hourly'];
             }
-            
+
+            // Calculate average temperature
+            $dailyForecasts[$forecastDate]['temperature'] = ($dailyForecasts[$forecastDate]['high'] + $dailyForecasts[$forecastDate]['low']) / 2;
+
+            // Collect conditions for finding the most representative one later
+            if (!isset($dailyForecasts[$forecastDate]['conditions_list'])) {
+                $dailyForecasts[$forecastDate]['conditions_list'] = [];
+            }
+            $dailyForecasts[$forecastDate]['conditions_list'][] = [
+                'main' => $forecast['weather'][0]['main'] ?? 'Clear',
+                'description' => $forecast['weather'][0]['description'] ?? 'Clear skies',
+                'id' => $forecast['weather'][0]['id'] ?? 800
+            ];
+
+            // Weather code - prioritize worse weather
+            // IDs: 2xx Thunderstorm, 3xx Drizzle, 5xx Rain, 6xx Snow, 7xx Atmos, 800 Clear, 80x Clouds
+            $currentCode = $forecast['weather'][0]['id'] ?? 800;
+            $existingCode = $dailyForecasts[$forecastDate]['weather_code'] ?? 0;
+
+            // Logic to prioritize severe weather for the daily code/icon
+            // If we don't have a code yet, take the current one
+            if ($existingCode === 0) {
+                $dailyForecasts[$forecastDate]['weather_code'] = $currentCode;
+                $dailyForecasts[$forecastDate]['code'] = $currentCode;
+            } else {
+                // Priority: Thunderstorm (2xx) > Snow (6xx) > Rain (5xx) > Drizzle (3xx) > Atmosphere (7xx) > Clouds (80x) > Clear (800)
+                // Simplify by checking ranges
+                $isSevere = fn($c) => ($c >= 200 && $c < 700);
+
+                if ($isSevere($currentCode) && !$isSevere($existingCode)) {
+                    $dailyForecasts[$forecastDate]['weather_code'] = $currentCode;
+                    $dailyForecasts[$forecastDate]['code'] = $currentCode;
+                }
+            }
+
             // Get max precipitation probability
             $pop = $forecast['pop'] ?? 0;
             $dailyForecasts[$forecastDate]['rain_chance'] = max($dailyForecasts[$forecastDate]['rain_chance'], $pop * 100);
             $dailyForecasts[$forecastDate]['precipitation_probability'] = max($dailyForecasts[$forecastDate]['precipitation_probability'], $pop * 100);
             $dailyForecasts[$forecastDate]['precipitation_chance'] = max($dailyForecasts[$forecastDate]['precipitation_chance'], $pop * 100);
-            
+
             // Keep wind speed in m/s (can convert to km/h if needed, but keep metric)
             $windSpeed = $forecast['wind']['speed'] ?? 0; // m/s
             $dailyForecasts[$forecastDate]['wind_speed'] = max($dailyForecasts[$forecastDate]['wind_speed'], $windSpeed);
             $dailyForecasts[$forecastDate]['wind'] = max($dailyForecasts[$forecastDate]['wind'], $windSpeed);
-            
-            // Weather code
-            $dailyForecasts[$forecastDate]['weather_code'] = $forecast['weather'][0]['id'] ?? 0;
-            $dailyForecasts[$forecastDate]['code'] = $forecast['weather'][0]['id'] ?? 0;
-            
+
             // Average humidity
             $humidity = $forecast['main']['humidity'] ?? 0;
             if ($dailyForecasts[$forecastDate]['humidity'] === 0) {
@@ -519,23 +558,88 @@ class WeatherController extends Controller
             } else {
                 $dailyForecasts[$forecastDate]['humidity'] = ($dailyForecasts[$forecastDate]['humidity'] + $humidity) / 2;
             }
-            
+
             $dailyForecasts[$forecastDate]['count']++;
         }
-        
+
+        // Post-process to set final daily condition based on accumulated data
+        foreach ($dailyForecasts as &$day) {
+            // If rain chance is high (>40%), force condition to Rain/Snow if not already
+            $isRainy = $day['rain_chance'] > 40;
+
+            // Find worst condition from list
+            $worstCondition = null;
+            $worstCode = 800;
+
+            foreach ($day['conditions_list'] as $cond) {
+                $code = $cond['id'];
+                // Simple priority check: lower ID is generally worse in OWM (2xx storm, 3xx drizzle, 5xx rain)
+                // Exception: 800 is clear, 80x is clouds. 7xx is fog etc.
+                // We want to prioritize 2xx, 5xx, 6xx, 3xx.
+
+                $score = 0;
+                if ($code >= 200 && $code < 300)
+                    $score = 10; // Thunderstorm
+                elseif ($code >= 600 && $code < 700)
+                    $score = 9; // Snow
+                elseif ($code >= 500 && $code < 600)
+                    $score = 8; // Rain
+                elseif ($code >= 300 && $code < 400)
+                    $score = 7; // Drizzle
+                elseif ($code >= 700 && $code < 800)
+                    $score = 6; // Fog/Mist
+                elseif ($code > 800)
+                    $score = 5; // Cloudy
+                elseif ($code == 800)
+                    $score = 1; // Clear
+
+                if (!$worstCondition || $score > $worstCondition['score']) {
+                    $worstCondition = $cond;
+                    $worstCondition['score'] = $score;
+                }
+            }
+
+            // If we have high rain chance but didn't pick up a rain condition (e.g. all intervals were cloudy but POP was high),
+            // force it to Rain if we didn't find something worse (like Storm).
+            if ($isRainy && ($worstCondition['score'] ?? 0) < 8) {
+                $day['condition'] = 'Rain';
+                $day['weather'] = 'Rain';
+                $day['description'] = 'Rain expected';
+                $day['weather_description'] = 'Rain expected';
+            } else {
+                $day['condition'] = $worstCondition['main'];
+                $day['weather'] = $worstCondition['main'];
+                $day['description'] = $worstCondition['description'];
+                $day['weather_description'] = $worstCondition['description'];
+            }
+
+            // Consistency check: If condition is Rain/Storm, ensure rain_chance is non-zero
+            // This handles cases where OWM returns condition 'Rain' but pop=0
+            $conditionLower = strtolower($day['condition']);
+            if ((str_contains($conditionLower, 'rain') || str_contains($conditionLower, 'storm')) && $day['rain_chance'] < 30) {
+                $day['rain_chance'] = 30; // Set a minimum baseline if it's actually raining
+                $day['precipitation_probability'] = 30;
+                $day['precipitation_chance'] = 30;
+            }
+
+            // Cleanup separate list
+            unset($day['conditions_list']);
+        }
+        unset($day); // break reference
+
         // Sort by date and get first N days (starting from today)
         ksort($dailyForecasts);
         $result = array_values($dailyForecasts);
-        
+
         // Ensure we return exactly the requested number of days starting from today
         // Build result array ensuring we have exactly $days days starting from today
         $finalResult = [];
         $currentDate = clone $today;
         $resultIndex = 0;
-        
+
         for ($i = 0; $i < $days; $i++) {
             $dateStr = $currentDate->format('Y-m-d');
-            
+
             // Find matching forecast for this date from the processed results
             $found = false;
             for ($j = $resultIndex; $j < count($result); $j++) {
@@ -548,7 +652,7 @@ class WeatherController extends Controller
                     break;
                 }
             }
-            
+
             // If no forecast found for this date, we've run out of API data
             // For a 7-day forecast, if API only provides 5-6 days, we'll return what we have
             // The frontend should handle displaying fewer days gracefully
@@ -557,11 +661,11 @@ class WeatherController extends Controller
                 // Return what we have rather than creating placeholder data
                 break;
             }
-            
+
             // Move to next day
             $currentDate->modify('+1 day');
         }
-        
+
         // Return the days we have (should be at least what API provides, up to requested days)
         return $finalResult;
     }
@@ -572,9 +676,9 @@ class WeatherController extends Controller
     private function processColorfulCloudsForecast(array $forecastData, int $days): array
     {
         $dailyForecasts = [];
-        $today = new \DateTime('today');
+        $today = \Carbon\Carbon::today('Asia/Manila');
         $todayStr = $today->format('Y-m-d');
-        
+
         // Map skycon to weather code for icon display
         $skyconToCode = [
             'CLEAR_DAY' => 800,
@@ -598,7 +702,7 @@ class WeatherController extends Controller
             'WIND' => 771,
             'FOG' => 741,
         ];
-        
+
         // Map condition to OpenWeatherMap-style condition
         $conditionMap = [
             'clear' => 'Clear',
@@ -612,31 +716,38 @@ class WeatherController extends Controller
             'windy' => 'Windy',
             'fog' => 'Fog',
         ];
-        
+
         // Process all forecast entries
         foreach ($forecastData as $forecast) {
             if (!isset($forecast['date'])) {
                 continue;
             }
-            
+
             $forecastDate = $forecast['date'];
-            
+
             // Normalize date format - handle different formats
             if (strpos($forecastDate, ' ') !== false) {
                 // If it's a datetime string, extract just the date part
                 $forecastDate = date('Y-m-d', strtotime($forecastDate));
             }
-            
+
+            // Ensure we're working with Asia/Manila dates
+            if (is_numeric($forecastDate) || strtotime($forecastDate)) {
+                $forecastDate = \Carbon\Carbon::parse($forecastDate)
+                    ->setTimezone('Asia/Manila')
+                    ->format('Y-m-d');
+            }
+
             // Skip past dates - only include today and future dates
             if ($forecastDate < $todayStr) {
                 continue;
             }
-            
+
             // Skip if we already have this date
             if (isset($dailyForecasts[$forecastDate])) {
                 continue;
             }
-            
+
             // Get skycon from conditions if available, or use default
             $skycon = 'CLEAR_DAY';
             if (isset($forecast['conditions'])) {
@@ -656,10 +767,10 @@ class WeatherController extends Controller
                 ];
                 $skycon = $skyconMap[$condition] ?? 'CLEAR_DAY';
             }
-            
+
             $weatherCode = $skyconToCode[$skycon] ?? 800;
             $condition = $conditionMap[strtolower($forecast['conditions'] ?? 'clear')] ?? 'Clear';
-            
+
             // Calculate rain chance from precipitation (simplified - ColorfulClouds doesn't provide probability)
             // Use precipitation amount as indicator (0-1mm = 0%, 1-5mm = 30%, 5-10mm = 60%, >10mm = 90%)
             $precipitation = $forecast['rain'] ?? 0;
@@ -675,12 +786,12 @@ class WeatherController extends Controller
                     $rainChance = 90;
                 }
             }
-            
+
             // Wind speed is in km/h from ColorfulClouds (metric unit)
             // Convert to m/s for consistency with OpenWeatherMap format (frontend will convert)
             $windSpeedKmh = $forecast['wind_speed'] ?? 0;
             $windSpeedMs = $windSpeedKmh / 3.6; // Convert km/h to m/s
-            
+
             $dailyForecasts[$forecastDate] = [
                 'date' => $forecastDate,
                 'time' => $forecastDate,
@@ -702,19 +813,30 @@ class WeatherController extends Controller
                 'weather_code' => $weatherCode,
                 'code' => $weatherCode,
                 'humidity' => $forecast['humidity'] ?? 0,
+                'temperature' => $forecast['temperature'] ?? (($dailyForecasts[$forecastDate]['high'] + $dailyForecasts[$forecastDate]['low']) / 2),
             ];
+
+            // Sanitize values to avoid frontend NaN issues
+            if ($dailyForecasts[$forecastDate]['high'] === null)
+                $dailyForecasts[$forecastDate]['high'] = 0;
+            if ($dailyForecasts[$forecastDate]['low'] === null)
+                $dailyForecasts[$forecastDate]['low'] = 0;
+            if ($dailyForecasts[$forecastDate]['rain_chance'] === null)
+                $dailyForecasts[$forecastDate]['rain_chance'] = 0;
+            if ($dailyForecasts[$forecastDate]['wind_speed'] === null)
+                $dailyForecasts[$forecastDate]['wind_speed'] = 0;
         }
-        
+
         // Sort by date
         ksort($dailyForecasts);
         $result = array_values($dailyForecasts);
-        
+
         // Build final result ensuring exactly $days starting from today
         // ColorfulClouds might not include today, so we need to handle that
         $finalResult = [];
-        $currentDate = clone $today;
+        $currentDate = $today->copy();
         $hasToday = false;
-        
+
         // Check if today is in the results
         foreach ($result as $forecast) {
             if ($forecast['date'] === $todayStr) {
@@ -722,16 +844,16 @@ class WeatherController extends Controller
                 break;
             }
         }
-        
+
         // If today is not in results and we have data, the API might start from tomorrow
         // In that case, we'll use the first available day as "today" or start from the first day
         $startIndex = 0;
         if (!$hasToday && count($result) > 0) {
             // Check if first result is tomorrow
-            $firstDate = new \DateTime($result[0]['date']);
-            $tomorrow = clone $today;
-            $tomorrow->modify('+1 day');
-            
+            $firstDate = \Carbon\Carbon::parse($result[0]['date']);
+            $tomorrow = $today->copy();
+            $tomorrow->addDay();
+
             if ($firstDate->format('Y-m-d') === $tomorrow->format('Y-m-d')) {
                 // API starts from tomorrow, so we have tomorrow + 6 more days = 7 days total
                 // But we want today + 6 future days, so we need to add today
@@ -739,20 +861,20 @@ class WeatherController extends Controller
                 $startIndex = 0;
             }
         }
-        
+
         // Build result array starting from today
         // First, try to match dates exactly
         $usedIndices = [];
         for ($i = 0; $i < $days; $i++) {
             $dateStr = $currentDate->format('Y-m-d');
             $found = false;
-            
+
             // Find matching forecast for this date (skip already used ones)
             for ($j = 0; $j < count($result); $j++) {
                 if (in_array($j, $usedIndices)) {
                     continue;
                 }
-                
+
                 if ($result[$j]['date'] === $dateStr) {
                     $finalResult[] = $result[$j];
                     $usedIndices[] = $j;
@@ -760,7 +882,7 @@ class WeatherController extends Controller
                     break;
                 }
             }
-            
+
             // If not found and this is today, try to use first available forecast as today
             if (!$found && $i === 0 && count($result) > 0 && !in_array(0, $usedIndices)) {
                 // Use first forecast as today if API doesn't include today
@@ -771,7 +893,7 @@ class WeatherController extends Controller
                 $usedIndices[] = 0;
                 $found = true;
             }
-            
+
             // If still not found, try to use next available forecast
             if (!$found && count($result) > count($usedIndices)) {
                 // Find next unused forecast
@@ -787,7 +909,7 @@ class WeatherController extends Controller
                     }
                 }
             }
-            
+
             // If still not found, we've run out of data - use last available forecast
             if (!$found && count($result) > 0) {
                 $lastForecast = end($result);
@@ -795,11 +917,11 @@ class WeatherController extends Controller
                 $lastForecast['time'] = $dateStr;
                 $finalResult[] = $lastForecast;
             }
-            
+
             // Move to next day
-            $currentDate->modify('+1 day');
+            $currentDate->addDay();
         }
-        
+
         // Ensure we have exactly $days
         return array_slice($finalResult, 0, $days);
     }

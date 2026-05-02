@@ -1,27 +1,41 @@
 <template>
-  <div class="inventory-detail-page">
-    <div class="container mx-auto px-4 py-8">
+  <div class="inventory-detail-page min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 py-10 px-4 sm:px-6 lg:px-8">
+    <div class="w-full mx-auto space-y-8">
       <!-- Header -->
-      <div class="flex justify-between items-center mb-8">
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <nav class="text-sm text-gray-500 mb-2">
-            <router-link to="/inventory" class="hover:text-gray-700">Inventory</router-link>
-            <span class="mx-2">/</span>
-            <span class="text-gray-900">{{ item.name }}</span>
-          </nav>
-          <h1 class="text-3xl font-bold text-gray-900">{{ item.name }}</h1>
-          <p class="text-gray-600 mt-2">{{ item.description }}</p>
+          <button
+            type="button"
+            @click="router.push('/inventory')"
+            class="inline-flex items-center text-sm font-medium text-emerald-700 hover:text-emerald-900 transition-colors"
+          >
+            <svg class="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Inventory
+          </button>
+          <div class="flex items-center gap-3 mt-4">
+            <h1 class="text-3xl font-bold text-gray-900">{{ item.name }}</h1>
+             <span class="px-3 py-1 bg-emerald-100 text-emerald-800 text-sm font-semibold rounded-full">{{ item.category }}</span>
+          </div>
+          <p class="mt-2 text-base text-gray-600 max-w-2xl">{{ item.description }}</p>
         </div>
         <div class="flex space-x-3">
           <button
             @click="editItem"
-            class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"
+            class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-md font-semibold text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500"
           >
             Edit Item
           </button>
           <button
+            @click="deleteItem"
+            class="inline-flex items-center px-4 py-2 bg-red-600 border border-transparent rounded-md font-semibold text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+          >
+            Delete
+          </button>
+          <button
             @click="adjustStock"
-            class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="inline-flex items-center px-4 py-2 bg-emerald-600 border border-transparent rounded-md font-semibold text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500"
           >
             Adjust Stock
           </button>
@@ -62,14 +76,7 @@
                 <span class="text-gray-600">Current Stock</span>
                 <span class="font-medium">{{ itemQuantity }} {{ item.unit }}</span>
               </div>
-              <div class="w-full bg-gray-200 rounded-full h-3">
-                <div
-                  :class="getStockBarClass()"
-                  class="h-3 rounded-full transition-all duration-300"
-                  :style="{ width: `${stockPercentage}%` }"
-                ></div>
-              </div>
-              <div class="grid grid-cols-2 gap-4">
+              <div class="grid grid-cols-2 gap-4 mt-4">
                 <div>
                   <div class="flex justify-between text-sm mb-1">
                     <span class="text-gray-600">Min Stock:</span>
@@ -203,6 +210,19 @@
                 <span class="text-gray-600">Last Updated:</span>
                 <span class="font-medium">{{ formatDate(item.updated_at) }}</span>
               </div>
+              <div v-if="item.expiry_date" class="flex justify-between">
+                <span class="text-gray-600">Expiry Date:</span>
+                <span class="font-medium text-red-600" v-if="new Date(item.expiry_date) < new Date()">{{ formatDate(item.expiry_date) }} (Expired)</span>
+                <span class="font-medium" v-else>{{ formatDate(item.expiry_date) }}</span>
+              </div>
+              <div v-if="item.location" class="flex justify-between">
+                <span class="text-gray-600">Location:</span>
+                <span class="font-medium">{{ item.location }}</span>
+              </div>
+              <div v-if="item.notes" class="pt-2 border-t border-gray-100">
+                <span class="text-gray-600 block text-sm mb-1">Notes:</span>
+                <p class="text-sm text-gray-800">{{ item.notes }}</p>
+              </div>
             </div>
           </div>
 
@@ -228,12 +248,7 @@
               >
                 📋 Set Reorder Point
               </button>
-              <button
-                @click="viewSuppliers"
-                class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
-              >
-                🏪 View Suppliers
-              </button>
+
             </div>
           </div>
 
@@ -259,108 +274,29 @@
         </div>
       </div>
     </div>
-
-    <!-- Edit Modal -->
-    <div v-if="showEditModal" class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-      <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        <div class="fixed inset-0 bg-gray-900 bg-opacity-60 transition-opacity" @click="closeEditModal"></div>
-
-        <div class="inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg w-full">
-          <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4 border-b border-gray-100">
-            <h3 class="text-xl leading-6 font-bold text-gray-900">Edit Product</h3>
-            <p class="text-sm text-gray-500 mt-1">Update the details below.</p>
-          </div>
-
-          <form @submit.prevent="submitEditForm" class="p-6 space-y-5">
-            <div v-if="editFormError" class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-              {{ editFormError }}
-            </div>
-
-            <div class="grid grid-cols-2 gap-4">
-              <div class="col-span-2">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Item Name <span class="text-red-500">*</span></label>
-                <input v-model="editForm.name" required type="text" class="w-full rounded-lg border-gray-300 focus:border-emerald-500 focus:ring-emerald-500 shadow-sm" placeholder="e.g. Urea 46-0-0">
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Category <span class="text-red-500">*</span></label>
-                <select v-model="editForm.category" required class="w-full rounded-lg border-gray-300 focus:border-emerald-500 focus:ring-emerald-500 shadow-sm">
-                  <option value="" disabled>Select...</option>
-                  <option value="seeds">Seeds</option>
-                  <option value="fertilizer">Fertilizer</option>
-                  <option value="pesticide">Pesticide</option>
-                  <option value="equipment">Equipment</option>
-                  <option value="tools">Tools</option>
-                </select>
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Unit <span class="text-red-500">*</span></label>
-                <select v-model="editForm.unit" required class="w-full rounded-lg border-gray-300 focus:border-emerald-500 focus:ring-emerald-500 shadow-sm">
-                  <option value="kg">Kilograms (kg)</option>
-                  <option value="liters">Liters</option>
-                  <option value="bags">Bags</option>
-                  <option value="pieces">Pieces</option>
-                  <option value="pounds">Pounds</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="bg-emerald-50 p-4 rounded-lg border border-emerald-100 grid grid-cols-2 gap-4">
-              <div>
-                <label class="block text-xs font-bold text-emerald-800 uppercase mb-1">Current Stock</label>
-                <input v-model.number="editForm.current_stock" type="number" step="0.01" min="0" class="w-full rounded-md border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500">
-              </div>
-              <div>
-                <label class="block text-xs font-bold text-emerald-800 uppercase mb-1">Alert Level (Min)</label>
-                <input v-model.number="editForm.minimum_stock" type="number" step="0.01" min="0" class="w-full rounded-md border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500">
-              </div>
-              <div class="col-span-2">
-                <label class="block text-xs font-bold text-emerald-800 uppercase mb-1">Unit Price ($)</label>
-                <input v-model.number="editForm.unit_price" type="number" step="0.01" min="0" class="w-full rounded-md border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500">
-              </div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                <input v-model="editForm.location" type="text" class="w-full rounded-lg border-gray-300 focus:border-emerald-500 focus:ring-emerald-500 shadow-sm" placeholder="e.g. Warehouse A">
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Expiry Date</label>
-                <input v-model="editForm.expiry_date" type="date" class="w-full rounded-lg border-gray-300 focus:border-emerald-500 focus:ring-emerald-500 shadow-sm">
-              </div>
-              <div class="col-span-2">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Description / Notes</label>
-                <textarea v-model="editForm.description" rows="2" class="w-full rounded-lg border-gray-300 focus:border-emerald-500 focus:ring-emerald-500 shadow-sm"></textarea>
-              </div>
-            </div>
-
-            <div class="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
-              <button type="button" @click="closeEditModal" class="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">
-                Cancel
-              </button>
-              <button type="submit" :disabled="loading" class="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm font-medium disabled:opacity-50 flex items-center">
-                <span v-if="loading" class="mr-2 animate-spin">⟳</span>
-                Update Item
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
+    <!-- Stock Adjustment Modal -->
+    <StockAdjustmentModal
+      :show="showStockModal"
+      :item="item"
+      @close="showStockModal = false"
+      @updated="handleStockUpdated"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { formatCurrency } from '@/utils/format'
 import { useInventoryStore } from '@/stores/inventory'
 import api from '@/services/api'
+import StockAdjustmentModal from './StockAdjustmentModal.vue'
 
 const route = useRoute()
 const router = useRouter()
 const inventoryStore = useInventoryStore()
 const loading = computed(() => inventoryStore.loading)
+const showStockModal = ref(false)
 const error = ref('')
 
 const item = ref({
@@ -383,32 +319,11 @@ const usageHistory = ref([])
 const suppliers = ref([])
 const loadingTransactions = ref(false)
 const loadingUsageHistory = ref(false)
-const showEditModal = ref(false)
-const editFormError = ref('')
-
-const editForm = reactive({
-  name: '',
-  category: '',
-  unit: 'kg',
-  current_stock: 0,
-  minimum_stock: 0,
-  unit_price: 0,
-  location: '',
-  expiry_date: '',
-  description: ''
-})
 
 const totalValue = computed(() => {
   const qty = item.value.current_stock || item.value.quantity || 0
   const price = item.value.unit_price || 0
   return qty * price
-})
-
-const stockPercentage = computed(() => {
-  const qty = item.value.current_stock || item.value.quantity || 0
-  const maxStock = item.value.max_stock || item.value.maximum_stock || 0
-  if (maxStock === 0) return 0
-  return Math.min((qty / maxStock) * 100, 100)
 })
 
 // Computed properties for backward compatibility
@@ -418,8 +333,8 @@ const itemMaxStock = computed(() => item.value.max_stock || item.value.maximum_s
 const itemStatus = computed(() => {
   if (item.value.status) return item.value.status
   // Derive status from stock levels
-  const qty = itemQuantity.value
-  const minStock = itemMinStock.value
+  const qty = Number(itemQuantity.value)
+  const minStock = Number(itemMinStock.value)
   if (qty <= 0) return 'out_of_stock'
   if (qty <= minStock) return 'low_stock'
   return 'in_stock'
@@ -443,55 +358,33 @@ const getTransactionBadgeClass = (type) => {
   return classes[type] || 'bg-gray-100 text-gray-800'
 }
 
-const getStockBarClass = () => {
-  const percentage = stockPercentage.value
-  if (percentage < 20) return 'bg-red-600'
-  if (percentage < 50) return 'bg-yellow-600'
-  return 'bg-green-600'
-}
-
 const formatDate = (date) => {
   if (!date) return 'Not set'
   return new Date(date).toLocaleDateString()
 }
 
 const editItem = () => {
-  editFormError.value = ''
-  // Populate form with current item data
-  Object.assign(editForm, {
-    name: item.value.name || '',
-    category: item.value.category || '',
-    unit: item.value.unit || 'kg',
-    current_stock: Number(item.value.current_stock ?? item.value.quantity ?? 0),
-    minimum_stock: Number(item.value.minimum_stock ?? item.value.min_stock ?? 0),
-    unit_price: Number(item.value.unit_price ?? 0),
-    location: item.value.location || '',
-    expiry_date: item.value.expiry_date || '',
-    description: item.value.description || ''
-  })
-  showEditModal.value = true
+  router.push(`/inventory/${item.value.id}/edit`)
 }
 
-const closeEditModal = () => {
-  showEditModal.value = false
-  editFormError.value = ''
-}
-
-const submitEditForm = async () => {
-  editFormError.value = ''
+const deleteItem = async () => {
+  if (!confirm('Are you sure you want to delete this item? This action cannot be undone.')) return
+  
   try {
-    await inventoryStore.updateItem(item.value.id, editForm)
-    await reloadFromStore()
-    closeEditModal()
+    await inventoryStore.deleteItem(item.value.id)
+    router.push('/inventory')
   } catch (e) {
-    console.error('Error updating item:', e)
-    editFormError.value = e.response?.data?.message || 'Failed to update item. Please check inputs.'
+    console.error('Failed to delete item', e)
+    error.value = e.userMessage || e.response?.data?.message || 'Failed to delete item'
   }
 }
 
 const adjustStock = () => {
-  // Show stock adjustment modal
-  console.log('Adjust stock')
+  showStockModal.value = true
+}
+
+const handleStockUpdated = async () => {
+  await reloadFromStore()
 }
 
 const addStock = async () => {
@@ -530,7 +423,7 @@ const setReorderPoint = async () => {
   }
   
   try {
-    await inventoryStore.updateItem(item.value.id, { reorder_point: reorderPoint })
+    await inventoryStore.updateItem(item.value.id, { minimum_stock: reorderPoint })
     await reloadFromStore()
     alert('Reorder point updated successfully')
   } catch (error) {
@@ -539,12 +432,7 @@ const setReorderPoint = async () => {
   }
 }
 
-const viewSuppliers = () => {
-  // Navigate to suppliers page if route exists
-  router.push('/suppliers').catch(() => {
-    alert('Suppliers page is not available yet')
-  })
-}
+
 
 const reloadFromStore = async () => {
   if (item.value.id) {

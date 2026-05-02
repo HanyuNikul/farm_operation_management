@@ -20,24 +20,37 @@ class FinancialService
     public function getFarmFinancialSummary($farmId, $period = '30')
     {
         $startDate = now()->subDays($period);
-        
+
         $expenses = $this->getFarmExpenses($farmId, $startDate);
         $sales = $this->getFarmSales($farmId, $startDate);
         $laborCosts = $this->getFarmLaborCosts($farmId, $startDate);
-        
+
         $totalExpenses = $expenses->sum('amount');
         $totalSales = $sales->sum('total_amount');
-        $totalLaborCosts = $laborCosts->sum('total_amount');
-        $totalCosts = $totalExpenses + $totalLaborCosts;
         
+        // Remove double-counting: if labor costs are already in expenses, do not add them again
+        // Or if you only sum non-labor expenses, we'll just use total Expenses.
+        // Assuming Expense model creates 'labor' category expenses for tasks.
+        $totalLaborCosts = $expenses->where('category', 'labor')->sum('amount');
+        if ($totalLaborCosts == 0) {
+           // Fallback to LaborWages if Expense records were missed for some reason
+           $totalLaborCosts = $laborCosts->sum('wage_amount');
+           $totalCosts = $totalExpenses + $totalLaborCosts;
+        } else {
+           $totalCosts = $totalExpenses; // Expense already includes labor
+        }
+        
+        $totalProcessingCosts = $expenses->where('category', 'processing')->sum('amount');
+
         $netProfit = $totalSales - $totalCosts;
         $profitMargin = $totalSales > 0 ? ($netProfit / $totalSales) * 100 : 0;
-        
+
         return [
             'period_days' => $period,
             'total_revenue' => $totalSales,
             'total_expenses' => $totalExpenses,
             'total_labor_costs' => $totalLaborCosts,
+            'total_processing_costs' => $totalProcessingCosts,
             'total_costs' => $totalCosts,
             'net_profit' => $netProfit,
             'profit_margin' => round($profitMargin, 2),
@@ -84,15 +97,15 @@ class FinancialService
      */
     public function getFarmLaborCosts($farmId, $startDate = null)
     {
-        $query = LaborWage::whereHas('laborer', function ($q) use ($farmId) {
+        $query = LaborWage::whereHas('task.planting.field', function ($q) use ($farmId) {
             $q->where('farm_id', $farmId);
         });
 
         if ($startDate) {
-            $query->where('payment_date', '>=', $startDate);
+            $query->where('date', '>=', $startDate);
         }
 
-        return $query->with(['laborer', 'task'])->orderBy('payment_date', 'desc')->get();
+        return $query->with(['laborer', 'task'])->orderBy('date', 'desc')->get();
     }
 
     /**
@@ -185,8 +198,8 @@ class FinancialService
     public function getCostPerHectare($farmId, $period = '30')
     {
         $farm = Farm::findOrFail($farmId);
-        $totalArea = $farm->fields->sum('size_hectares');
-        
+        $totalArea = $farm->fields->sum('size');
+
         if ($totalArea == 0) {
             return 0;
         }
@@ -201,8 +214,8 @@ class FinancialService
     public function getRevenuePerHectare($farmId, $period = '30')
     {
         $farm = Farm::findOrFail($farmId);
-        $totalArea = $farm->fields->sum('size_hectares');
-        
+        $totalArea = $farm->fields->sum('size');
+
         if ($totalArea == 0) {
             return 0;
         }
@@ -217,39 +230,49 @@ class FinancialService
     public function getMonthlyTrends($farmId, $months = 12)
     {
         $trends = [];
-        
+
         for ($i = $months - 1; $i >= 0; $i--) {
             $date = now()->subMonths($i);
             $startDate = $date->copy()->startOfMonth();
             $endDate = $date->copy()->endOfMonth();
-            
+
             $monthlyExpenses = $this->getFarmExpenses($farmId, $startDate)
                 ->where('date', '<=', $endDate)
                 ->sum('amount');
-                
+
             $monthlySales = $this->getFarmSales($farmId, $startDate)
                 ->where('sale_date', '<=', $endDate)
                 ->sum('total_amount');
-                
-            $monthlyLaborCosts = $this->getFarmLaborCosts($farmId, $startDate)
-                ->where('payment_date', '<=', $endDate)
-                ->sum('total_amount');
+
+            $monthlyProcessingCosts = $this->getFarmExpenses($farmId, $startDate)
+                ->where('date', '<=', $endDate)
+                ->where('category', 'processing')
+                ->sum('amount');
+
+            // Total costs should just be monthlyExpenses because labor is tracked in expenses
+            $totalCosts = $monthlyExpenses;
             
-            $totalCosts = $monthlyExpenses + $monthlyLaborCosts;
+            // For explicitly showing labor:
+            $monthlyLaborCosts = $this->getFarmExpenses($farmId, $startDate)
+                ->where('date', '<=', $endDate)
+                ->where('category', 'labor')
+                ->sum('amount');
+
             $netProfit = $monthlySales - $totalCosts;
-            
+
             $trends[] = [
                 'month' => $date->format('Y-m'),
                 'month_name' => $date->format('M Y'),
                 'revenue' => $monthlySales,
                 'expenses' => $monthlyExpenses,
                 'labor_costs' => $monthlyLaborCosts,
+                'processing_costs' => $monthlyProcessingCosts,
                 'total_costs' => $totalCosts,
                 'net_profit' => $netProfit,
                 'profit_margin' => $monthlySales > 0 ? round(($netProfit / $monthlySales) * 100, 2) : 0,
             ];
         }
-        
+
         return $trends;
     }
 
@@ -259,67 +282,133 @@ class FinancialService
     public function getCropProfitabilityAnalysis($farmId, $period = '365')
     {
         $startDate = now()->subDays($period);
-        
-        // Get all plantings in the period
+
         $plantings = Planting::whereHas('field', function ($q) use ($farmId) {
             $q->where('farm_id', $farmId);
         })
-        ->where('planting_date', '>=', $startDate)
-        ->with(['expenses', 'harvests.sales', 'field'])
-        ->get();
+            ->where('planting_date', '>=', $startDate)
+            ->with(['expenses', 'harvests.sales', 'field'])
+            ->get();
 
         $cropAnalysis = [];
-        
+
         foreach ($plantings as $planting) {
             $cropType = $planting->crop_type;
-            
+
             if (!isset($cropAnalysis[$cropType])) {
                 $cropAnalysis[$cropType] = [
-                    'total_area' => 0,
-                    'total_expenses' => 0,
-                    'total_revenue' => 0,
-                    'total_labor_costs' => 0,
-                    'planting_count' => 0,
+                    'total_area'          => 0,
+                    'total_expenses'      => 0,
+                    'failed_expenses'     => 0,  // expenses on failed plantings only
+                    'total_revenue'       => 0,
+                    'total_labor_costs'   => 0,
+                    'planting_count'      => 0,
+                    'failed_count'        => 0,
                 ];
             }
-            
+
             $plantingExpenses = $planting->expenses->sum('amount');
-            $plantingRevenue = $planting->harvests->sum(function ($harvest) {
+            $plantingRevenue  = $planting->harvests->sum(function ($harvest) {
                 return $harvest->sales->sum('total_amount');
             });
-            
-            // Calculate labor costs for this planting (approximate)
             $laborCosts = LaborWage::whereHas('task', function ($q) use ($planting) {
                 $q->where('planting_id', $planting->id);
             })->sum('total_amount');
-            
-            $cropAnalysis[$cropType]['total_area'] += $planting->field->size_hectares;
-            $cropAnalysis[$cropType]['total_expenses'] += $plantingExpenses;
-            $cropAnalysis[$cropType]['total_revenue'] += $plantingRevenue;
-            $cropAnalysis[$cropType]['total_labor_costs'] += $laborCosts;
+
+            $isFailed = $planting->status === Planting::STATUS_FAILED;
+
+            $cropAnalysis[$cropType]['total_area']        += $planting->field->size;
+            $cropAnalysis[$cropType]['total_expenses']     += $plantingExpenses;
+            $cropAnalysis[$cropType]['total_revenue']      += $plantingRevenue;
+            $cropAnalysis[$cropType]['total_labor_costs']  += $laborCosts;
             $cropAnalysis[$cropType]['planting_count']++;
+
+            if ($isFailed) {
+                $cropAnalysis[$cropType]['failed_count']++;
+                $cropAnalysis[$cropType]['failed_expenses'] += $plantingExpenses;
+            }
         }
-        
-        // Calculate profitability metrics
+
         foreach ($cropAnalysis as $cropType => &$analysis) {
             $totalCosts = $analysis['total_expenses'] + $analysis['total_labor_costs'];
-            $netProfit = $analysis['total_revenue'] - $totalCosts;
-            
-            $analysis['total_costs'] = $totalCosts;
-            $analysis['net_profit'] = $netProfit;
-            $analysis['profit_margin'] = $analysis['total_revenue'] > 0 ? 
-                round(($netProfit / $analysis['total_revenue']) * 100, 2) : 0;
-            $analysis['roi'] = $totalCosts > 0 ? 
-                round(($netProfit / $totalCosts) * 100, 2) : 0;
-            $analysis['cost_per_hectare'] = $analysis['total_area'] > 0 ? 
-                round($totalCosts / $analysis['total_area'], 2) : 0;
-            $analysis['revenue_per_hectare'] = $analysis['total_area'] > 0 ? 
-                round($analysis['total_revenue'] / $analysis['total_area'], 2) : 0;
-            $analysis['profit_per_hectare'] = $analysis['total_area'] > 0 ? 
-                round($netProfit / $analysis['total_area'], 2) : 0;
+            $netProfit  = $analysis['total_revenue'] - $totalCosts;
+
+            $analysis['total_costs']           = $totalCosts;
+            $analysis['net_profit']            = $netProfit;
+            $analysis['failure_rate']          = $analysis['planting_count'] > 0
+                ? round(($analysis['failed_count'] / $analysis['planting_count']) * 100, 1)
+                : 0;
+            $analysis['crop_loss_amount']      = $analysis['failed_expenses'];
+            $analysis['profit_margin']         = $analysis['total_revenue'] > 0
+                ? round(($netProfit / $analysis['total_revenue']) * 100, 2)
+                : 0;
+            $analysis['roi']                   = $totalCosts > 0
+                ? round(($netProfit / $totalCosts) * 100, 2)
+                : 0;
+            $analysis['cost_per_hectare']      = $analysis['total_area'] > 0
+                ? round($totalCosts / $analysis['total_area'], 2)
+                : 0;
+            $analysis['revenue_per_hectare']   = $analysis['total_area'] > 0
+                ? round($analysis['total_revenue'] / $analysis['total_area'], 2)
+                : 0;
+            $analysis['profit_per_hectare']    = $analysis['total_area'] > 0
+                ? round($netProfit / $analysis['total_area'], 2)
+                : 0;
         }
-        
+
         return $cropAnalysis;
+    }
+
+    /**
+     * Get profitability by individual planting
+     */
+    public function getPlantingProfitability($farmId, $period = '365')
+    {
+        $startDate = now()->subDays($period);
+
+        $plantings = Planting::whereHas('field', function ($q) use ($farmId) {
+            $q->where('farm_id', $farmId);
+        })
+            ->where('planting_date', '>=', $startDate)
+            ->with(['expenses', 'harvests.sales', 'field', 'riceVariety'])
+            ->get();
+
+        return $plantings->map(function ($planting) {
+            $isFailed    = $planting->status === Planting::STATUS_FAILED;
+            $allExpenses = $planting->expenses->sum('amount');
+            $cropLoss    = $planting->expenses
+                ->where('category', 'crop_loss')
+                ->sum('amount');
+
+            $laborCosts = LaborWage::whereHas('task', function ($q) use ($planting) {
+                $q->where('planting_id', $planting->id);
+            })->sum('wage_amount');
+
+            $totalExpenses = $allExpenses + $laborCosts;
+
+            $revenue = $planting->harvests->sum(function ($harvest) {
+                return $harvest->sales->sum('total_amount');
+            });
+
+            $netProfit = $revenue - $totalExpenses;
+
+            return [
+                'id'               => $planting->id,
+                'field_name'       => $planting->field->name ?? 'Unknown Field',
+                'variety'          => $planting->riceVariety->name ?? $planting->crop_type,
+                'status'           => $planting->status,
+                'is_failed'        => $isFailed,
+                'failure_category' => $planting->failure_category,
+                'failure_reason'   => $planting->failure_reason,
+                'failed_at'        => $planting->failed_at,
+                'revenue'          => $revenue,
+                'expenses'         => $totalExpenses,
+                'crop_loss'        => $cropLoss,
+                'net_profit'       => $netProfit,
+                'roi'              => $totalExpenses > 0 ? round(($netProfit / $totalExpenses) * 100, 2) : 0,
+                'planting_date'    => $planting->planting_date,
+            ];
+        });
     }
 
     /**
@@ -328,47 +417,47 @@ class FinancialService
     public function getBudgetAnalysis($farmId, $budgetData, $period = '30')
     {
         $actualSummary = $this->getFarmFinancialSummary($farmId, $period);
-        
+
         $analysis = [];
-        
+
         // Revenue analysis
         $analysis['revenue'] = [
             'budgeted' => $budgetData['revenue'] ?? 0,
             'actual' => $actualSummary['total_revenue'],
             'variance' => $actualSummary['total_revenue'] - ($budgetData['revenue'] ?? 0),
-            'variance_percentage' => ($budgetData['revenue'] ?? 0) > 0 ? 
+            'variance_percentage' => ($budgetData['revenue'] ?? 0) > 0 ?
                 round((($actualSummary['total_revenue'] - ($budgetData['revenue'] ?? 0)) / ($budgetData['revenue'] ?? 0)) * 100, 2) : 0,
         ];
-        
+
         // Expense analysis by category
         foreach (Expense::class::getCategories() as $category) {
             $budgetedAmount = $budgetData['expenses'][$category] ?? 0;
             $actualAmount = $actualSummary['expense_breakdown'][$category]['total'] ?? 0;
             $variance = $actualAmount - $budgetedAmount;
-            
+
             $analysis['expenses'][$category] = [
                 'budgeted' => $budgetedAmount,
                 'actual' => $actualAmount,
                 'variance' => $variance,
-                'variance_percentage' => $budgetedAmount > 0 ? 
+                'variance_percentage' => $budgetedAmount > 0 ?
                     round(($variance / $budgetedAmount) * 100, 2) : 0,
                 'status' => $variance > 0 ? 'over_budget' : 'under_budget',
             ];
         }
-        
+
         // Overall analysis
         $totalBudgetedExpenses = array_sum($budgetData['expenses'] ?? []);
         $totalBudgetedCosts = $totalBudgetedExpenses + ($budgetData['labor_costs'] ?? 0);
         $budgetedProfit = ($budgetData['revenue'] ?? 0) - $totalBudgetedCosts;
-        
+
         $analysis['summary'] = [
             'budgeted_profit' => $budgetedProfit,
             'actual_profit' => $actualSummary['net_profit'],
             'profit_variance' => $actualSummary['net_profit'] - $budgetedProfit,
-            'budget_performance' => $budgetedProfit != 0 ? 
+            'budget_performance' => $budgetedProfit != 0 ?
                 round((($actualSummary['net_profit'] - $budgetedProfit) / abs($budgetedProfit)) * 100, 2) : 0,
         ];
-        
+
         return $analysis;
     }
 
@@ -379,22 +468,22 @@ class FinancialService
     {
         $projection = [];
         $currentBalance = $this->getCurrentCashBalance($farmId);
-        
+
         for ($i = 0; $i < $months; $i++) {
             $projectionDate = now()->addMonths($i);
-            
+
             // Project revenue based on expected harvests
             $projectedRevenue = $this->projectMonthlyRevenue($farmId, $projectionDate);
-            
+
             // Project expenses based on historical averages
             $projectedExpenses = $this->projectMonthlyExpenses($farmId, $projectionDate);
-            
+
             // Project labor costs
             $projectedLaborCosts = $this->projectMonthlyLaborCosts($farmId, $projectionDate);
-            
+
             $netCashFlow = $projectedRevenue - $projectedExpenses - $projectedLaborCosts;
             $currentBalance += $netCashFlow;
-            
+
             $projection[] = [
                 'month' => $projectionDate->format('Y-m'),
                 'month_name' => $projectionDate->format('M Y'),
@@ -405,7 +494,7 @@ class FinancialService
                 'ending_balance' => $currentBalance,
             ];
         }
-        
+
         return $projection;
     }
 
@@ -429,10 +518,10 @@ class FinancialService
         $historicalRevenue = Sale::whereHas('harvest.planting.field', function ($q) use ($farmId) {
             $q->where('farm_id', $farmId);
         })
-        ->whereMonth('sale_date', $date->month)
-        ->whereYear('sale_date', '>=', $date->year - 2) // Last 2 years
-        ->avg('total_amount');
-        
+            ->whereMonth('sale_date', $date->month)
+            ->whereYear('sale_date', '>=', $date->year - 2) // Last 2 years
+            ->avg('total_amount');
+
         return $historicalRevenue ?? 0;
     }
 
@@ -444,10 +533,10 @@ class FinancialService
         $historicalExpenses = Expense::whereHas('planting.field', function ($q) use ($farmId) {
             $q->where('farm_id', $farmId);
         })
-        ->whereMonth('date', $date->month)
-        ->whereYear('date', '>=', $date->year - 2)
-        ->avg('amount');
-        
+            ->whereMonth('date', $date->month)
+            ->whereYear('date', '>=', $date->year - 2)
+            ->avg('amount');
+
         return $historicalExpenses ?? 0;
     }
 
@@ -456,13 +545,13 @@ class FinancialService
      */
     private function projectMonthlyLaborCosts($farmId, $date)
     {
-        $historicalLaborCosts = LaborWage::whereHas('laborer', function ($q) use ($farmId) {
+        $historicalLaborCosts = LaborWage::whereHas('task.planting.field', function ($q) use ($farmId) {
             $q->where('farm_id', $farmId);
         })
-        ->whereMonth('payment_date', $date->month)
-        ->whereYear('payment_date', '>=', $date->year - 2)
-        ->avg('total_amount');
-        
+            ->whereMonth('date', $date->month)
+            ->whereYear('date', '>=', $date->year - 2)
+            ->avg('wage_amount');
+
         return $historicalLaborCosts ?? 0;
     }
 
@@ -473,18 +562,18 @@ class FinancialService
     {
         $summary = $this->getFarmFinancialSummary($farmId, $period);
         $farm = Farm::findOrFail($farmId);
-        $totalArea = $farm->fields->sum('size_hectares');
-        
+        $totalArea = $farm->fields->sum('size');
+
         return [
-            'gross_profit_margin' => $summary['total_revenue'] > 0 ? 
+            'gross_profit_margin' => $summary['total_revenue'] > 0 ?
                 round((($summary['total_revenue'] - $summary['total_costs']) / $summary['total_revenue']) * 100, 2) : 0,
             'net_profit_margin' => $summary['profit_margin'],
             'return_on_investment' => $summary['roi'],
             'cost_per_hectare' => $totalArea > 0 ? round($summary['total_costs'] / $totalArea, 2) : 0,
             'revenue_per_hectare' => $totalArea > 0 ? round($summary['total_revenue'] / $totalArea, 2) : 0,
-            'expense_ratio' => $summary['total_revenue'] > 0 ? 
+            'expense_ratio' => $summary['total_revenue'] > 0 ?
                 round(($summary['total_expenses'] / $summary['total_revenue']) * 100, 2) : 0,
-            'labor_cost_ratio' => $summary['total_revenue'] > 0 ? 
+            'labor_cost_ratio' => $summary['total_revenue'] > 0 ?
                 round(($summary['total_labor_costs'] / $summary['total_revenue']) * 100, 2) : 0,
             'break_even_point' => $this->calculateBreakEvenPoint($farmId),
         ];
@@ -496,18 +585,18 @@ class FinancialService
     private function calculateBreakEvenPoint($farmId)
     {
         $summary = $this->getFarmFinancialSummary($farmId, 365); // Annual data
-        
+
         if ($summary['total_revenue'] == 0) {
             return 0;
         }
-        
+
         $variableCostRatio = $summary['total_costs'] / $summary['total_revenue'];
         $contributionMargin = 1 - $variableCostRatio;
-        
+
         // Simplified break-even calculation
         // In reality, you'd need to separate fixed and variable costs
         $fixedCosts = $summary['total_costs'] * 0.3; // Assume 30% are fixed costs
-        
+
         return $contributionMargin > 0 ? round($fixedCosts / $contributionMargin, 2) : 0;
     }
 
@@ -524,6 +613,8 @@ class FinancialService
             Expense::CATEGORY_EQUIPMENT => 'Equipment',
             Expense::CATEGORY_UTILITIES => 'Utilities',
             Expense::CATEGORY_MAINTENANCE => 'Maintenance',
+            Expense::CATEGORY_INVENTORY_PURCHASE => 'Inventory Purchase',
+            Expense::CATEGORY_PROCESSING => 'Processing',
             Expense::CATEGORY_OTHER => 'Other',
         ];
     }
@@ -534,41 +625,77 @@ class FinancialService
     public function generateFinancialReport($farmId, $startDate, $endDate, $reportType = 'summary')
     {
         $farm = Farm::findOrFail($farmId);
-        
+
         $expenses = $this->getFarmExpenses($farmId, $startDate)
             ->where('date', '<=', $endDate);
         $sales = $this->getFarmSales($farmId, $startDate)
             ->where('sale_date', '<=', $endDate);
         $laborCosts = $this->getFarmLaborCosts($farmId, $startDate)
-            ->where('payment_date', '<=', $endDate);
-        
+            ->where('date', '<=', $endDate);
+
+        $totalRevenue  = $sales->sum('total_amount');
+        $totalExpenses = $expenses->sum('amount');
+        $totalLabor    = $laborCosts->sum('wage_amount');
+        $cropLosses    = $expenses->where('category', 'crop_loss')->sum('amount');
+
+        // Count failed plantings in the period for the context block
+        $failedPlantingsCount = Planting::whereHas('field', function ($q) use ($farmId) {
+            $q->where('farm_id', $farmId);
+        })
+            ->where('status', Planting::STATUS_FAILED)
+            ->whereBetween('failed_at', [$startDate, $endDate])
+            ->count();
+
         $report = [
             'farm' => [
-                'id' => $farm->id,
-                'name' => $farm->name,
-                'total_area' => $farm->fields->sum('size_hectares'),
+                'id'         => $farm->id,
+                'name'       => $farm->name,
+                'total_area' => $farm->fields->sum('size'),
             ],
             'period' => [
                 'start_date' => $startDate->format('Y-m-d'),
-                'end_date' => $endDate->format('Y-m-d'),
-                'days' => $startDate->diffInDays($endDate),
+                'end_date'   => $endDate->format('Y-m-d'),
+                'days'       => $startDate->diffInDays($endDate),
             ],
             'summary' => [
-                'total_revenue' => $sales->sum('total_amount'),
-                'total_expenses' => $expenses->sum('amount'),
-                'total_labor_costs' => $laborCosts->sum('total_amount'),
-                'net_profit' => $sales->sum('total_amount') - $expenses->sum('amount') - $laborCosts->sum('total_amount'),
+                'total_revenue'          => $totalRevenue,
+                'total_expenses'         => $totalExpenses,
+                'total_labor_costs'      => $totalLabor,
+                'total_crop_losses'      => $cropLosses,
+                'failed_plantings_count' => $failedPlantingsCount,
+                'net_profit'             => $totalRevenue - ($totalExpenses + $totalLabor),
+                'profit_margin'          => $totalRevenue > 0
+                    ? round((($totalRevenue - ($totalExpenses + $totalLabor)) / $totalRevenue) * 100, 2)
+                    : 0,
             ],
+            'expenses_by_category' => $this->getExpenseBreakdown($expenses),
+            'monthly_trends'       => $this->getMonthlyTrends($farmId, 12),
         ];
-        
+
+        // Flatten summary for controller compatibility if needed, or controller adapts.
+        // Controller expects top-level keys for summary in its mapping:
+        // 'total_revenue' => $report['total_revenue'] ?? 0, 
+        // ... wait, controller uses $report['total_revenue']. 
+        // WRONG assumption in controller? 
+        // Controller: $report = $this->financialService->generateFinancialReport(...)
+        // $report['total_revenue']
+        // BUT here we return ['summary' => ['total_revenue' ...]]
+        // So we should flatten it or update controller. 
+        // Let's flatten for safety towards what seems to be the intention, OR match controller.
+
+        // Let's return a flat structure merged with the structured one to be safe
+        // OR better: Update the Service to return the top level keys expected by the controller.
+
+        $flatReport = array_merge($report, $report['summary']); // active summary keys at top level
+
         if ($reportType === 'detailed') {
-            $report['details'] = [
+            $flatReport['details'] = [
                 'expenses' => $expenses->toArray(),
                 'sales' => $sales->toArray(),
                 'labor_costs' => $laborCosts->toArray(),
             ];
         }
-        
-        return $report;
+
+        return $flatReport;
     }
 }

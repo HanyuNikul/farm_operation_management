@@ -1,59 +1,80 @@
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50">
-    <header class="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200 sticky top-0 z-10">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between py-6 gap-4">
-          <div>
-            <div class="flex items-center gap-3">
-              <div class="h-10 w-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
-                <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                </svg>
-              </div>
-              <div>
-                <h1 class="text-2xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">Rice Fields</h1>
-                <p class="text-sm text-gray-600 mt-0.5">
-                  Track field boundaries, soil data, and readiness for planting.
-                </p>
-              </div>
-            </div>
-          </div>
-          <div class="flex items-center gap-3">
-            <button
-              @click="refreshFields"
-              :disabled="loading"
-              class="inline-flex items-center px-4 py-2.5 text-sm font-medium rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 transition-all duration-200 shadow-sm hover:shadow"
+  <div class="min-h-screen bg-gray-50">
+    <div class="container mx-auto px-4 py-8">
+      <!-- Standard Header -->
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <div>
+          <h1 class="text-3xl font-bold text-gray-800">Rice Fields</h1>
+          <p class="text-gray-500 mt-1">Track field boundaries, soil data, and readiness for planting.</p>
+        </div>
+        <div class="flex flex-col sm:flex-row w-full md:w-auto items-stretch sm:items-center gap-3">
+          <button
+             @click="openEditFarmModal"
+             class="flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm font-medium w-full sm:w-auto"
+          >
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            </svg>
+            Edit Farm Details
+          </button>
+          <button
+            @click="refreshFields"
+            :disabled="loading"
+            class="flex items-center justify-center gap-2 bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors shadow-sm font-medium disabled:opacity-50 w-full sm:w-auto"
+          >
+            <svg
+              :class="['h-5 w-5', { 'animate-spin': loading }]"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              <svg
-                :class="['h-4 w-4 mr-2', { 'animate-spin': loading }]"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-              Refresh
-            </button>
-            <button
-              @click="goToFieldSetup"
-              class="inline-flex items-center px-5 py-2.5 text-sm font-semibold rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-            >
-              <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              Add Field
-            </button>
-          </div>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Refresh
+          </button>
+          <button
+            @click="goToFieldSetup"
+            class="flex items-center justify-center gap-2 bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-green-700 transition-colors shadow-sm font-medium w-full sm:w-auto"
+          >
+            <span class="text-xl leading-none">+</span> Add Field
+          </button>
         </div>
       </div>
-    </header>
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <!-- Filter Bar -->
+      <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-6 flex flex-col md:flex-row gap-3 items-center">
+        <div class="flex-1 relative w-full">
+          <span class="absolute left-3 top-2.5 text-gray-400">🔍</span>
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Search by field name or location…"
+            class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-sm"
+          />
+        </div>
+        <select v-model="soilFilter" class="w-full md:w-44 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none bg-white text-sm">
+          <option value="">All Soil Types</option>
+          <option v-for="soil in soilOptions" :key="soil" :value="soil">{{ soil }}</option>
+        </select>
+        <select v-model="statusFilter" class="w-full md:w-44 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none bg-white text-sm">
+          <option value="">All Statuses</option>
+          <option value="active">Active</option>
+          <option value="fallow">Fallow</option>
+          <option value="maintenance">Maintenance</option>
+        </select>
+        <select v-model="cropFilter" class="w-full md:w-44 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none bg-white text-sm">
+          <option value="">All Crops</option>
+          <option v-for="crop in cropOptions" :key="crop" :value="crop">{{ crop }}</option>
+        </select>
+        <button
+          v-if="searchQuery || soilFilter || statusFilter || cropFilter"
+          @click="clearFilters"
+          class="whitespace-nowrap text-sm text-gray-500 hover:text-red-600 transition-colors px-3 py-2 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50"
+        >
+          ✕ Clear
+        </button>
+      </div>
+
       <div v-if="error" class="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
         <div class="flex">
           <div class="flex-shrink-0">
@@ -111,9 +132,16 @@
           </button>
         </div>
 
+        <div v-else-if="filteredFields.length === 0 && fields.length > 0" class="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-12 text-center border border-gray-100">
+          <div class="text-5xl mb-4">🌾</div>
+          <h2 class="text-xl font-bold text-gray-900 mb-2">No fields match your filters</h2>
+          <p class="text-sm text-gray-500 mb-6">Try adjusting or clearing the filters above.</p>
+          <button @click="clearFilters" class="text-sm text-green-700 hover:underline font-medium">Clear filters</button>
+        </div>
+
         <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <article
-            v-for="field in fields"
+            v-for="field in filteredFields"
             :key="field.id"
             class="group bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 border border-gray-100 overflow-hidden"
           >
@@ -154,8 +182,24 @@
                     </svg>
                   </div>
                   <div class="flex-1">
-                    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Current Crop</p>
-                    <p class="text-sm font-bold text-green-700">{{ field.current_crop }}</p>
+                    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Current Planting</p>
+                    <div class="flex items-center gap-2">
+                      <router-link 
+                        v-if="field.current_planting_id"
+                        :to="`/plantings/${field.current_planting_id}`"
+                        class="text-sm font-bold text-green-700 hover:text-green-900 hover:underline"
+                      >
+                        {{ field.current_crop }}
+                      </router-link>
+                      <span v-else class="text-sm font-bold text-green-700">{{ field.current_crop }}</span>
+                      <span 
+                        v-if="field.current_planting_status"
+                        class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                        :class="plantingStatusClass(field.current_planting_status)"
+                      >
+                        {{ formatPlantingStatus(field.current_planting_status) }}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -215,19 +259,34 @@
               </dl>
 
               <!-- Footer -->
-              <div class="mt-auto pt-4 border-t border-gray-200">
+              <div class="mt-auto pt-4 border-t border-gray-200 flex justify-between items-center">
                 <div class="text-xs text-gray-400 flex items-center gap-1">
                   <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   Updated {{ formatDate(field.updated_at || field.created_at) }}
                 </div>
+                <button
+                  @click.stop="editField(field.id)"
+                  class="text-gray-400 hover:text-indigo-600 transition-colors p-1 rounded hover:bg-indigo-50"
+                  title="Edit Field"
+                >
+                  <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
               </div>
             </div>
           </article>
         </div>
       </div>
-    </main>
+    </div>
+    <EditFarmModal
+      :show="showEditFarmModal"
+      :farm="farmProfile"
+      @close="showEditFarmModal = false"
+      @updated="onFarmUpdated"
+    />
   </div>
 </template>
 
@@ -235,21 +294,71 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useFarmStore } from '@/stores/farm'
+import EditFarmModal from '@/Components/Farm/EditFarmModal.vue'
 
 const router = useRouter()
 const farmStore = useFarmStore()
 
 const loading = ref(true)
 const error = ref('')
+const showEditFarmModal = ref(false)
 
 const fields = computed(() => farmStore.fields || [])
+const farmProfile = computed(() => farmStore.farmProfile)
+
+// Filters
+const searchQuery = ref('')
+const soilFilter = ref('')
+const statusFilter = ref('')
+const cropFilter = ref('')
+
+const soilOptions = computed(() => [
+  ...new Set(fields.value.map(f => f.soil_type).filter(Boolean))
+].sort())
+
+const cropOptions = computed(() => [
+  ...new Set(fields.value.map(f => f.current_crop).filter(Boolean))
+].sort())
+
+const filteredFields = computed(() => {
+  const search = searchQuery.value.toLowerCase().trim()
+  return fields.value.filter(f => {
+    if (search) {
+      const name = (f.name || '').toLowerCase()
+      const loc = formatLocation(f.location || f.address).toLowerCase()
+      if (!name.includes(search) && !loc.includes(search)) return false
+    }
+    if (soilFilter.value && f.soil_type !== soilFilter.value) return false
+    if (statusFilter.value && f.status !== statusFilter.value) return false
+    if (cropFilter.value && f.current_crop !== cropFilter.value) return false
+    return true
+  })
+})
+
+const clearFilters = () => {
+  searchQuery.value = ''
+  soilFilter.value = ''
+  statusFilter.value = ''
+  cropFilter.value = ''
+}
+
+const openEditFarmModal = () => {
+  showEditFarmModal.value = true
+}
+
+const onFarmUpdated = async () => {
+  await farmStore.fetchFarmProfile()
+}
 
 const refreshFields = async () => {
   loading.value = true
   error.value = ''
 
   try {
-    await farmStore.fetchFields()
+    await Promise.all([
+      farmStore.fetchFields(),
+      farmStore.fetchFarmProfile()
+    ])
   } catch (err) {
     console.error('Failed to load fields:', err)
     error.value = err.userMessage || err.response?.data?.message || 'Unable to load fields.'
@@ -261,6 +370,10 @@ const refreshFields = async () => {
 const goToFieldSetup = () => {
   // Navigate directly to field creation page
   router.push('/fields/create')
+}
+
+const editField = (id) => {
+  router.push(`/fields/${id}/edit`)
 }
 
 const formatArea = (value) => {
@@ -290,6 +403,23 @@ const statusLabel = (status) => {
     maintenance: 'Maintenance'
   }
   return labels[status] || status
+}
+
+const plantingStatusClass = (status) => {
+  const classes = {
+    planned: 'bg-gray-100 text-gray-700',
+    planted: 'bg-blue-100 text-blue-700',
+    growing: 'bg-yellow-100 text-yellow-700',
+    ready: 'bg-teal-100 text-teal-700',
+    harvested: 'bg-green-100 text-green-700',
+    failed: 'bg-red-100 text-red-700'
+  }
+  return classes[status] || 'bg-gray-100 text-gray-700'
+}
+
+const formatPlantingStatus = (status) => {
+  if (!status) return ''
+  return status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ')
 }
 
 const statusClass = (status) => {

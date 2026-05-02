@@ -11,6 +11,7 @@ use App\Models\Sale;
 use App\Models\LaborWage;
 use App\Models\InventoryItem;
 use App\Models\WeatherLog;
+use App\Models\PostHarvestProcess;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
@@ -38,8 +39,22 @@ class ReportService
      */
     public function getDashboardAnalytics($userId, $farmId = null)
     {
-        $farms = Farm::where('user_id', $userId)->get();
-        
+        $farms = Farm::where('user_id', $userId)
+            ->with([
+                'latestWeather',
+                'fields' => function ($query) {
+                    $query->with([
+                        // 'latestWeather', // Moved to Farm
+                        'plantings' => function ($q) {
+                            $q->where('crop_type', 'rice')
+                                ->whereIn('status', ['planted', 'growing'])
+                                ->latest('planting_date');
+                        }
+                    ]);
+                }
+            ])
+            ->get();
+
         if ($farmId) {
             $farms = $farms->where('id', $farmId);
         }
@@ -61,19 +76,19 @@ class ReportService
     private function getOverviewMetrics($userId, $farms)
     {
         $totalArea = $farms->sum(function ($farm) {
-            return $farm->fields->sum('size_hectares');
+            return $farm->fields->sum('size');
         });
 
         $activePlantings = Planting::whereHas('field', function ($q) use ($farms) {
             $q->whereIn('farm_id', $farms->pluck('id'));
         })
-        ->where('status', 'active')
-        ->count();
+            ->where('status', 'active')
+            ->count();
 
         $totalInventoryValue = InventoryItem::where('user_id', $userId)
             ->get()
             ->sum(function ($item) {
-                return $item->quantity * $item->price;
+                return ($item->current_stock ?? 0) * ($item->unit_price ?? 0);
             });
 
         $lowStockItems = $this->inventoryService->getLowStockItems($userId)->count();
@@ -121,26 +136,34 @@ class ReportService
     private function getProductionSummary($farms)
     {
         $farmIds = $farms->pluck('id');
-        
+
         $recentHarvests = Harvest::whereHas('planting.field', function ($q) use ($farmIds) {
             $q->whereIn('farm_id', $farmIds);
         })
-        ->where('harvest_date', '>=', now()->subDays(30))
-        ->get();
+            ->where('harvest_date', '>=', now()->subDays(30))
+            ->get();
 
         $upcomingHarvests = Planting::whereHas('field', function ($q) use ($farmIds) {
             $q->whereIn('farm_id', $farmIds);
         })
-        ->where('expected_harvest_date', '>=', now())
-        ->where('expected_harvest_date', '<=', now()->addDays(30))
-        ->where('status', 'active')
-        ->count();
+            ->where('expected_harvest_date', '>=', now())
+            ->where('expected_harvest_date', '<=', now()->addDays(30))
+            ->where('status', 'active')
+            ->count();
+
+        $recentProcessing = PostHarvestProcess::whereHas('planting.field', function ($q) use ($farmIds) {
+            $q->whereIn('farm_id', $farmIds);
+        })
+            ->where('status', PostHarvestProcess::STATUS_COMPLETED)
+            ->where('completed_date', '>=', now()->subDays(30))
+            ->get();
 
         return [
             'recent_harvests_count' => $recentHarvests->count(),
             'recent_total_yield' => $recentHarvests->sum('yield_kg'),
+            'recent_processed_yield' => $recentProcessing->sum('output_quantity'),
             'upcoming_harvests' => $upcomingHarvests,
-            'average_yield_per_harvest' => $recentHarvests->count() > 0 ? 
+            'average_yield_per_harvest' => $recentHarvests->count() > 0 ?
                 $recentHarvests->avg('yield_kg') : 0,
         ];
     }
@@ -158,11 +181,10 @@ class ReportService
         ];
 
         // Weather alerts
+        // Weather alerts (Farm level)
         foreach ($farms as $farm) {
-            foreach ($farm->fields as $field) {
-                $weatherAlerts = $this->weatherService->getWeatherAlerts($field);
-                $alerts['weather_alerts'] += count($weatherAlerts);
-            }
+            $weatherAlerts = $this->weatherService->getWeatherAlerts($farm);
+            $alerts['weather_alerts'] += count($weatherAlerts);
         }
 
         // Inventory alerts (low stock)
@@ -180,9 +202,9 @@ class ReportService
         $overdueHarvests = Planting::whereHas('field', function ($q) use ($farms) {
             $q->whereIn('farm_id', $farms->pluck('id'));
         })
-        ->where('expected_harvest_date', '<', now())
-        ->where('status', 'active')
-        ->count();
+            ->where('expected_harvest_date', '<', now())
+            ->where('status', 'active')
+            ->count();
 
         $alerts['production_alerts'] = $overdueHarvests;
 
@@ -201,10 +223,10 @@ class ReportService
         $recentExpenses = Expense::whereHas('planting.field', function ($q) use ($farmIds) {
             $q->whereIn('farm_id', $farmIds);
         })
-        ->where('created_at', '>=', now()->subDays(7))
-        ->orderBy('created_at', 'desc')
-        ->limit(5)
-        ->get();
+            ->where('created_at', '>=', now()->subDays(7))
+            ->orderBy('created_at', 'desc')
+            ->limit(5)
+            ->get();
 
         foreach ($recentExpenses as $expense) {
             $activities[] = [
@@ -220,10 +242,10 @@ class ReportService
         $recentSales = Sale::whereHas('harvest.planting.field', function ($q) use ($farmIds) {
             $q->whereIn('farm_id', $farmIds);
         })
-        ->where('created_at', '>=', now()->subDays(7))
-        ->orderBy('created_at', 'desc')
-        ->limit(5)
-        ->get();
+            ->where('created_at', '>=', now()->subDays(7))
+            ->orderBy('created_at', 'desc')
+            ->limit(5)
+            ->get();
 
         foreach ($recentSales as $sale) {
             $activities[] = [
@@ -239,10 +261,10 @@ class ReportService
         $recentHarvests = Harvest::whereHas('planting.field', function ($q) use ($farmIds) {
             $q->whereIn('farm_id', $farmIds);
         })
-        ->where('created_at', '>=', now()->subDays(7))
-        ->orderBy('created_at', 'desc')
-        ->limit(5)
-        ->get();
+            ->where('created_at', '>=', now()->subDays(7))
+            ->orderBy('created_at', 'desc')
+            ->limit(5)
+            ->get();
 
         foreach ($recentHarvests as $harvest) {
             $activities[] = [
@@ -251,6 +273,26 @@ class ReportService
                 'amount' => null,
                 'date' => $harvest->created_at,
                 'crop_type' => $harvest->planting->crop_type ?? 'Unknown',
+            ];
+        }
+
+        // Recent post-harvest processing
+        $recentProcessing = PostHarvestProcess::whereHas('planting.field', function ($q) use ($farmIds) {
+            $q->whereIn('farm_id', $farmIds);
+        })
+            ->where('status', PostHarvestProcess::STATUS_COMPLETED)
+            ->where('completed_date', '>=', now()->subDays(7)->toDateString())
+            ->orderBy('completed_date', 'desc')
+            ->limit(5)
+            ->get();
+
+        foreach ($recentProcessing as $process) {
+            $activities[] = [
+                'type' => 'processing',
+                'description' => "Processing: ". ucfirst($process->process_type) ." {$process->output_quantity} {$process->output_unit}",
+                'amount' => null,
+                'date' => Carbon::parse($process->completed_date ?? $process->updated_at),
+                'crop_type' => $process->planting->crop_type ?? 'Unknown',
             ];
         }
 
@@ -268,10 +310,10 @@ class ReportService
     public function getPerformanceBenchmarks($farmId, $period = 30)
     {
         $farm = Farm::findOrFail($farmId);
-        
+
         // Get industry benchmarks (these would typically come from external data sources)
         $industryBenchmarks = $this->getIndustryBenchmarks();
-        
+
         // Get farm performance
         $farmPerformance = [
             'yield_per_hectare' => $this->calculateYieldPerHectare($farmId, $period),
@@ -308,13 +350,13 @@ class ReportService
     private function calculateYieldPerHectare($farmId, $period)
     {
         $startDate = now()->subDays($period);
-        
+
         $harvests = Harvest::whereHas('planting.field', function ($q) use ($farmId) {
             $q->where('farm_id', $farmId);
         })
-        ->where('harvest_date', '>=', $startDate)
-        ->with('planting.field')
-        ->get();
+            ->where('harvest_date', '>=', $startDate)
+            ->with('planting.field')
+            ->get();
 
         if ($harvests->isEmpty()) {
             return 0;
@@ -322,7 +364,7 @@ class ReportService
 
         $totalYield = $harvests->sum('yield_kg');
         $totalArea = $harvests->sum(function ($harvest) {
-            return $harvest->planting->field->size_hectares;
+            return $harvest->planting->field->size;
         });
 
         return $totalArea > 0 ? $totalYield / $totalArea : 0;
@@ -334,7 +376,7 @@ class ReportService
     private function calculateLaborEfficiency($farmId, $period)
     {
         $laborSummary = $this->laborService->getLaborCostSummary($farmId, $period);
-        $totalArea = Farm::findOrFail($farmId)->fields->sum('size_hectares');
+        $totalArea = Farm::findOrFail($farmId)->fields->sum('size');
 
         if ($totalArea == 0 || $laborSummary['total_hours'] == 0) {
             return 0;
@@ -363,7 +405,7 @@ class ReportService
     private function calculateOverallPerformanceScore($comparison)
     {
         $scores = [];
-        
+
         foreach ($comparison as $metric => $data) {
             if ($data['performance'] === 'above_benchmark') {
                 $scores[] = min(100, 50 + abs($data['percentage_difference']));
@@ -381,15 +423,15 @@ class ReportService
     public function getSeasonalAnalysis($farmId, $years = 2)
     {
         $analysis = [];
-        
+
         for ($year = 0; $year < $years; $year++) {
             $yearData = [];
             $currentYear = now()->subYears($year)->year;
-            
+
             for ($month = 1; $month <= 12; $month++) {
                 $startDate = Carbon::create($currentYear, $month, 1)->startOfMonth();
                 $endDate = Carbon::create($currentYear, $month, 1)->endOfMonth();
-                
+
                 $monthlyData = [
                     'month' => $startDate->format('M'),
                     'year' => $currentYear,
@@ -399,10 +441,10 @@ class ReportService
                     'sales' => $this->getMonthlySales($farmId, $startDate, $endDate),
                     'weather_summary' => $this->getMonthlyWeatherSummary($farmId, $startDate, $endDate),
                 ];
-                
+
                 $yearData[] = $monthlyData;
             }
-            
+
             $analysis[$currentYear] = $yearData;
         }
 
@@ -421,8 +463,8 @@ class ReportService
         return Planting::whereHas('field', function ($q) use ($farmId) {
             $q->where('farm_id', $farmId);
         })
-        ->whereBetween('planting_date', [$startDate, $endDate])
-        ->count();
+            ->whereBetween('planting_date', [$startDate, $endDate])
+            ->count();
     }
 
     /**
@@ -433,8 +475,8 @@ class ReportService
         $harvests = Harvest::whereHas('planting.field', function ($q) use ($farmId) {
             $q->where('farm_id', $farmId);
         })
-        ->whereBetween('harvest_date', [$startDate, $endDate])
-        ->get();
+            ->whereBetween('harvest_date', [$startDate, $endDate])
+            ->get();
 
         return [
             'count' => $harvests->count(),
@@ -450,8 +492,8 @@ class ReportService
         return Expense::whereHas('planting.field', function ($q) use ($farmId) {
             $q->where('farm_id', $farmId);
         })
-        ->whereBetween('date', [$startDate, $endDate])
-        ->sum('amount');
+            ->whereBetween('date', [$startDate, $endDate])
+            ->sum('amount');
     }
 
     /**
@@ -462,8 +504,8 @@ class ReportService
         return Sale::whereHas('harvest.planting.field', function ($q) use ($farmId) {
             $q->where('farm_id', $farmId);
         })
-        ->whereBetween('sale_date', [$startDate, $endDate])
-        ->sum('total_amount');
+            ->whereBetween('sale_date', [$startDate, $endDate])
+            ->sum('total_amount');
     }
 
     /**
@@ -473,20 +515,18 @@ class ReportService
     {
         $farm = Farm::findOrFail($farmId);
         $weatherData = [];
-        
-        foreach ($farm->fields as $field) {
-            $logs = WeatherLog::where('field_id', $field->id)
-                ->whereBetween('recorded_at', [$startDate, $endDate])
-                ->get();
-                
-            if ($logs->isNotEmpty()) {
-                $weatherData[] = [
-                    'field_id' => $field->id,
-                    'avg_temperature' => $logs->avg('temperature'),
-                    'avg_humidity' => $logs->avg('humidity'),
-                    'total_readings' => $logs->count(),
-                ];
-            }
+
+        $logs = WeatherLog::where('farm_id', $farm->id)
+            ->whereBetween('recorded_at', [$startDate, $endDate])
+            ->get();
+
+        if ($logs->isNotEmpty()) {
+            $weatherData[] = [
+                'farm_id' => $farm->id,
+                'avg_temperature' => $logs->avg('temperature'),
+                'avg_humidity' => $logs->avg('humidity'),
+                'total_readings' => $logs->count(),
+            ];
         }
 
         return $weatherData;
@@ -497,13 +537,46 @@ class ReportService
      */
     private function identifySeasonalTrends($analysis)
     {
-        // This would analyze the seasonal data to identify patterns
-        // For now, returning a simplified structure
+        $monthlyTotals = [];
+        for ($i = 1; $i <= 12; $i++) {
+            $monthObj = \Carbon\Carbon::create(null, $i, 1);
+            $monthName = $monthObj->format('F');
+            $monthlyTotals[$monthName] = [
+                'plantings' => 0,
+                'harvests'  => 0,
+                'expenses'  => 0,
+                'sales'     => 0,
+            ];
+        }
+
+        foreach ($analysis as $year => $months) {
+            foreach ($months as $data) {
+                // $data['month'] is 'Jan', 'Feb', etc. 
+                $monthName = \Carbon\Carbon::parse($data['month'] . ' 1 ' . $year)->format('F');
+                if (isset($monthlyTotals[$monthName])) {
+                    $monthlyTotals[$monthName]['plantings'] += $data['plantings'] ?? 0;
+                    $monthlyTotals[$monthName]['harvests']  += $data['harvests']['count'] ?? 0;
+                    $monthlyTotals[$monthName]['expenses']  += $data['expenses'] ?? 0;
+                    $monthlyTotals[$monthName]['sales']     += $data['sales'] ?? 0;
+                }
+            }
+        }
+
+        $getTop3 = function ($key) use ($monthlyTotals) {
+            $sorted = $monthlyTotals;
+            uasort($sorted, function ($a, $b) use ($key) {
+                return $b[$key] <=> $a[$key];
+            });
+            // Return keys of the top 3 months, only if they have > 0 values for that key
+            return array_slice(array_keys(array_filter($sorted, fn($item) => $item[$key] > 0)), 0, 3);
+        };
+
         return [
-            'peak_planting_months' => ['March', 'April', 'May'],
-            'peak_harvest_months' => ['September', 'October', 'November'],
-            'highest_expense_months' => ['April', 'May', 'June'],
-            'best_sales_months' => ['October', 'November', 'December'],
+            'peak_planting_months'   => $getTop3('plantings'),
+            'peak_harvest_months'    => $getTop3('harvests'),
+            'highest_expense_months' => $getTop3('expenses'),
+            'best_sales_months'      => $getTop3('sales'),
+            // Fallback for cases with empty data
         ];
     }
 

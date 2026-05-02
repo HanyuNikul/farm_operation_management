@@ -4,27 +4,33 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
 class Laborer extends Model
 {
+    use HasFactory;
 
     protected $fillable = [
         'name',
+        'profile_picture',
         'phone',
-        'contact',
         'email',
         'address',
         'skill_level',
         'specialization',
-        'hourly_rate',
+        'rate',
+        'rate_type',
         'status',
         'hire_date',
-        'emergency_contact',
+        'hire_date',
+        'emergency_contact_name',
+        'emergency_contact_phone',
         'notes',
         'user_id',
     ];
 
     protected $casts = [
-        'hourly_rate' => 'decimal:2',
+        'rate' => 'decimal:2',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -48,7 +54,7 @@ class Laborer extends Model
     /**
      * Alias for wages relationship expected by controllers
      */
-    public function wages()
+    public function wages(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(LaborWage::class);
     }
@@ -83,5 +89,27 @@ class Laborer extends Model
         return $this->tasks()
             ->whereIn('status', [Task::STATUS_PENDING, Task::STATUS_IN_PROGRESS])
             ->count();
+    }
+    /**
+     * Get the groups that the laborer belongs to.
+     */
+    public function groups(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(LaborerGroup::class, 'group_laborer');
+    }
+
+    /**
+     * Get the post-harvest processes assigned to this laborer (via tasks)
+     */
+    public function postHarvestProcesses(): \Illuminate\Database\Eloquent\Relations\HasManyThrough
+    {
+        return $this->hasManyThrough(
+            PostHarvestProcess::class,
+            Task::class,
+            'assigned_to', // Foreign key on the tasks table
+            'task_id',     // Foreign key on the post_harvest_processes table
+            'id',          // Local key on the laborers table
+            'id'           // Local key on the tasks table
+        );
     }
 }

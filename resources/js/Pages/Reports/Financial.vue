@@ -9,11 +9,45 @@
         </div>
         <div class="flex space-x-3">
           <button
-            @click="exportReport"
-            class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+            @click="printReport"
+            class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 flex items-center gap-2"
           >
-            Export Report
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+            </svg>
+            Print Report
           </button>
+          <div class="relative">
+            <button
+              @click="showExportMenu = !showExportMenu"
+              class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 flex items-center gap-2"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div
+              v-if="showExportMenu"
+              class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border border-gray-200"
+            >
+              <button
+                @click="exportToPDF"
+                class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+              >
+                📄 Export as PDF
+              </button>
+              <button
+                @click="exportReport"
+                class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+              >
+                📊 Export as CSV
+              </button>
+            </div>
+          </div>
           <button
             @click="generateReport"
             class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -195,7 +229,13 @@
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm font-medium"
                       :class="transaction.type === 'income' ? 'text-green-600' : 'text-red-600'">
-                    {{ transaction.type === 'income' ? '+' : '-' }}{{ formatCurrency(Math.abs(transaction.amount)) }}
+                    {{ transaction.type === 'income' ? '+' : '-' }}
+                    <template v-if="transaction.payment_method === 'revenue_share'">
+                      {{ formatNumber(Math.abs(transaction.amount), { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}%
+                    </template>
+                    <template v-else>
+                      {{ formatCurrency(Math.abs(transaction.amount)) }}
+                    </template>
                   </td>
                 </tr>
               </tbody>
@@ -209,13 +249,15 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { formatCurrency } from '@/utils/format'
+import { formatCurrency, formatNumber } from '@/utils/format'
 import { reportsAPI } from '@/services/api'
 import LineChart from '@/Components/Charts/LineChart.vue'
+import { pdfExport } from '@/utils/pdfExport'
 
 const startDate = ref('2024-01-01')
 const endDate = ref('2024-12-31')
 const reportType = ref('income')
+const showExportMenu = ref(false)
 
 const financialSummary = ref({
   totalRevenue: 0,
@@ -223,6 +265,7 @@ const financialSummary = ref({
   netProfit: 0,
   profitMargin: 0
 })
+
 
 const expenseBreakdown = ref([])
 
@@ -254,7 +297,31 @@ const generateReport = async () => {
   }
 }
 
+const exportToPDF = () => {
+  showExportMenu.value = false
+  try {
+    pdfExport.exportFinancialReport({
+      totalRevenue: financialSummary.value.totalRevenue,
+      totalExpenses: financialSummary.value.totalExpenses,
+      netProfit: financialSummary.value.netProfit,
+      expensesByCategory: expenseBreakdown.value.map(e => ({
+        category: e.category,
+        amount: e.amount,
+        percentage: e.percentage
+      }))
+    }, {
+      title: `Financial Report - ${reportType.value}`,
+      period: `${startDate.value} to ${endDate.value}`
+    })
+    alert('PDF exported successfully!')
+  } catch (error) {
+    console.error('Failed to export PDF:', error)
+    alert('Failed to export PDF')
+  }
+}
+
 const exportReport = () => {
+  showExportMenu.value = false
   // Export report as CSV
   try {
     const csvContent = generateCSV()
@@ -349,11 +416,70 @@ const loadFinancialData = async () => {
     alert('Failed to load financial data')
   }
 }
+
+const printReport = () => {
+  window.print()
+}
 </script>
 
 <style scoped>
 .financial-reports-page {
   min-height: 100vh;
   background-color: #f8fafc;
+}
+
+/* Print-friendly styles */
+@media print {
+  .financial-reports-page {
+    background-color: white !important;
+    padding: 0 !important;
+  }
+  
+  /* Hide buttons and form controls */
+  button,
+  select,
+  input[type="date"],
+  .flex.space-x-3 {
+    display: none !important;
+  }
+  
+  /* Ensure content fits on page */
+  .container {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+  
+  /* Make cards print without shadows */
+  .shadow-md,
+  .shadow-lg,
+  .shadow {
+    box-shadow: none !important;
+    border: 1px solid #e5e7eb !important;
+  }
+  
+  /* Ensure text is readable */
+  .bg-green-100,
+  .bg-red-100,
+  .bg-blue-100,
+  .bg-yellow-100 {
+    background-color: #f9fafb !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  
+  /* Page break handling */
+  .bg-white {
+    page-break-inside: avoid;
+  }
+  
+  /* Add report title for printing */
+  .financial-reports-page::before {
+    content: "Financial Report - " attr(data-date-range);
+    display: block;
+    font-size: 18px;
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 20px;
+  }
 }
 </style>

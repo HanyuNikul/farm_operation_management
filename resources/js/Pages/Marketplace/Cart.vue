@@ -1,39 +1,27 @@
 <template>
   <div class="min-h-screen bg-gray-50">
-    <!-- Header -->
-    <header class="bg-white shadow-sm border-b border-gray-200">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between items-center py-4">
-          <div class="flex items-center">
-            <router-link to="/marketplace" class="text-gray-500 hover:text-gray-700 mr-4">
-              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-              </svg>
-            </router-link>
-            <div>
-              <h1 class="text-xl font-semibold text-gray-900">Shopping Cart</h1>
-              <p class="text-sm text-gray-500">Review your rice products before checkout</p>
-            </div>
-          </div>
-          
-          <div class="flex items-center space-x-4">
-            <span class="text-sm text-gray-600">
-              {{ marketplaceStore.cartItemsCount }} items
-            </span>
-            <button 
-              v-if="marketplaceStore.cartItemsCount > 0"
-              @click="clearCart"
-              class="text-red-600 hover:text-red-700 text-sm font-medium"
-            >
-              Clear Cart
-            </button>
-          </div>
+    <div class="container mx-auto px-4 py-8">
+      <!-- Standard Header -->
+      <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+        <div>
+          <h1 class="text-3xl font-bold text-gray-800">Shopping Cart</h1>
+          <p class="text-gray-500 mt-1">Review your rice products before checkout</p>
+        </div>
+        <div class="flex items-center space-x-4">
+          <span class="text-sm text-gray-600">
+            {{ marketplaceStore.cartItemsCount }} items
+          </span>
+          <button 
+            v-if="marketplaceStore.cartItemsCount > 0"
+            @click="clearCart"
+            class="text-red-600 hover:text-red-700 text-sm font-medium"
+          >
+            Clear Cart
+          </button>
         </div>
       </div>
-    </header>
 
-    <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <!-- Main Content -->
       <div v-if="marketplaceStore.cartItemsCount === 0" class="text-center py-12">
         <svg class="h-16 w-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -65,57 +53,66 @@
                 :key="item.id"
                 class="p-6"
               >
-                <div class="flex items-center space-x-4">
-                  <!-- Product Image -->
-                  <div class="h-20 w-20 bg-gradient-to-br from-green-100 to-emerald-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <svg class="h-10 w-10 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                    </svg>
+                <!-- Cart Item: stacks on mobile, side-by-side on sm+ -->
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                  <!-- Top row: image + info -->
+                  <div class="flex items-start gap-3 flex-1 min-w-0">
+                    <!-- Product Image -->
+                    <div class="h-16 w-16 sm:h-20 sm:w-20 rounded-lg flex-shrink-0 overflow-hidden">
+                      <img
+                        v-if="item.image"
+                        :src="item.image"
+                        :alt="item.name"
+                        class="w-full h-full object-cover"
+                      />
+                      <div v-else class="w-full h-full bg-gradient-to-br from-green-100 to-emerald-100 flex items-center justify-center">
+                        <svg class="h-8 w-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                        </svg>
+                      </div>
+                    </div>
+
+                    <!-- Product Info -->
+                    <div class="flex-1 min-w-0">
+                      <h4 class="text-base font-medium text-gray-900 break-words leading-snug">{{ item.name }}</h4>
+                      <p class="text-sm text-gray-600 truncate">{{ item.farmer?.name || 'Local Farmer' }}</p>
+                      <p class="text-sm font-medium text-green-600 break-all">{{ formatCurrency(item.price) }}/{{ item.unit }}</p>
+                    </div>
                   </div>
 
-                  <!-- Product Info -->
-                  <div class="flex-1 min-w-0">
-                    <h4 class="text-lg font-medium text-gray-900">{{ item.name }}</h4>
-                    <p class="text-sm text-gray-600">{{ item.farmer?.name || 'Local Farmer' }}</p>
-                    <p class="text-sm font-medium text-green-600">{{ formatCurrency(item.price) }}/{{ item.unit }}</p>
-                  </div>
+                  <!-- Bottom row: quantity controls + price + remove -->
+                  <div class="flex items-center justify-between gap-3 sm:justify-end">
+                    <!-- Quantity Controls -->
+                    <div class="flex items-center gap-2">
+                      <button
+                        @click="updateQuantity(item.id, item.quantity - 1)"
+                        class="h-8 w-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-50 flex-shrink-0"
+                      >
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+                        </svg>
+                      </button>
+                      <span class="text-base font-medium text-gray-900 w-8 text-center">{{ item.quantity }}</span>
+                      <button
+                        @click="updateQuantity(item.id, item.quantity + 1)"
+                        class="h-8 w-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-50 flex-shrink-0"
+                      >
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                      </button>
+                    </div>
 
-                  <!-- Quantity Controls -->
-                  <div class="flex items-center space-x-3">
-                    <button 
-                      @click="updateQuantity(item.id, item.quantity - 1)"
-                      class="h-8 w-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-50"
-                    >
-                      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
-                      </svg>
-                    </button>
-                    
-                    <span class="text-lg font-medium text-gray-900 w-8 text-center">
-                      {{ item.quantity }}
-                    </span>
-                    
-                    <button 
-                      @click="updateQuantity(item.id, item.quantity + 1)"
-                      class="h-8 w-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-50"
-                    >
-                      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                    </button>
-                  </div>
-
-                  <!-- Item Total -->
-                  <div class="text-right">
-                    <p class="text-lg font-semibold text-gray-900">
-                      {{ formatCurrency(item.price * item.quantity) }}
-                    </p>
-                    <button 
-                      @click="removeItem(item.id)"
-                      class="text-red-600 hover:text-red-700 text-sm font-medium"
-                    >
-                      Remove
-                    </button>
+                    <!-- Item Total + Remove -->
+                    <div class="text-right flex-shrink-0">
+                      <p class="text-base font-semibold text-gray-900">{{ formatCurrency(item.price * item.quantity) }}</p>
+                      <button
+                        @click="removeItem(item.id)"
+                        class="text-red-600 hover:text-red-700 text-sm font-medium"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -133,41 +130,11 @@
                 <span class="text-gray-600">Subtotal</span>
                 <span class="text-gray-900">{{ formatCurrency(marketplaceStore.cartTotal) }}</span>
               </div>
-              
-              <div class="flex justify-between text-sm">
-                <span class="text-gray-600">Shipping</span>
-                <span class="text-gray-900">{{ formatCurrency(shippingCost) }}</span>
-              </div>
-              
-              <div class="flex justify-between text-sm">
-                <span class="text-gray-600">Tax</span>
-                <span class="text-gray-900">{{ formatCurrency(taxAmount) }}</span>
-              </div>
-              
+
               <div class="border-t border-gray-200 pt-3">
                 <div class="flex justify-between text-lg font-semibold">
                   <span class="text-gray-900">Total</span>
                   <span class="text-gray-900">{{ formatCurrency(totalAmount) }}</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Delivery Information -->
-            <div class="mb-6">
-              <h4 class="text-sm font-medium text-gray-900 mb-3">Delivery Information</h4>
-              <div class="space-y-2 text-sm text-gray-600">
-                <div class="flex items-center">
-                  <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Estimated delivery: 3-5 business days
-                </div>
-                <div class="flex items-center">
-                  <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  Free shipping on orders over {{ formatCurrency(50) }}
                 </div>
               </div>
             </div>
@@ -190,12 +157,12 @@
           </div>
         </div>
       </div>
-    </main>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useMarketplaceStore } from '@/stores/marketplace';
 import { formatCurrency } from '@/utils/format';
@@ -203,16 +170,13 @@ import { formatCurrency } from '@/utils/format';
 const router = useRouter();
 const marketplaceStore = useMarketplaceStore();
 
-const shippingCost = computed(() => {
-  return marketplaceStore.cartTotal >= 50 ? 0 : 10;
-});
-
-const taxAmount = computed(() => {
-  return marketplaceStore.cartTotal * 0.08; // 8% tax
+// Fetch cart from backend on mount
+onMounted(async () => {
+  await marketplaceStore.fetchCart();
 });
 
 const totalAmount = computed(() => {
-  return marketplaceStore.cartTotal + shippingCost.value + taxAmount.value;
+  return marketplaceStore.cartTotal;
 });
 
 const updateQuantity = (productId, newQuantity) => {

@@ -4,11 +4,16 @@
       <!-- Header -->
       <div class="flex justify-between items-center mb-8">
         <div>
-          <nav class="text-sm text-gray-500 mb-2">
-            <router-link to="/weather" class="hover:text-gray-700">Weather</router-link>
-            <span class="mx-2">/</span>
-            <span class="text-gray-900">{{ field.name }}</span>
-          </nav>
+          <button
+            type="button"
+            @click="router.push('/weather')"
+            class="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors mb-4"
+          >
+            <svg class="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Weather
+          </button>
           <h1 class="text-3xl font-bold text-gray-900">{{ field.name }} Weather</h1>
           <p class="text-gray-600 mt-2">Detailed weather conditions for this field</p>
         </div>
@@ -67,7 +72,7 @@
               </div>
             </div>
             <div class="ml-4">
-              <div class="text-2xl font-bold text-gray-900">{{ currentWeather.rainfall.toFixed(1) }} mm</div>
+              <div class="text-2xl font-bold text-gray-900">{{ Number(currentWeather.rainfall || 0).toFixed(1) }} mm</div>
               <div class="text-sm text-gray-600">Rainfall (24h)</div>
             </div>
           </div>
@@ -140,7 +145,7 @@
                       {{ Math.round(day.low || day.min_temperature || day.temperature || 0) }}°C
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {{ (day.rainfall || day.precipitation || 0).toFixed(1) }} mm
+                      {{ Number(day.rainfall || day.precipitation || 0).toFixed(1) }} mm
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {{ Math.round(day.humidity || 0) }}%
@@ -255,16 +260,10 @@
             <h3 class="text-lg font-semibold mb-4">Quick Actions</h3>
             <div class="space-y-3">
               <button
-                @click="viewHistoricalData"
+                @click="viewWeatherAnalytics"
                 class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
               >
-                📊 View Historical Data
-              </button>
-              <button
-                @click="setFieldAlerts"
-                class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
-              >
-                🔔 Set Field Alerts
+                📈 View Weather Reports
               </button>
               <button
                 @click="exportFieldData"
@@ -273,10 +272,10 @@
                 📤 Export Field Data
               </button>
               <button
-                @click="compareWithOtherFields"
+                @click="viewWeatherDashboard"
                 class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
               >
-                🔄 Compare Fields
+                🏠 View Weather Dashboard
               </button>
             </div>
           </div>
@@ -357,18 +356,18 @@ const viewFieldDetails = () => {
 }
 
 const viewHistoricalData = () => {
-  // Navigate to weather reports page with field filter
+  // Navigate to weather reports page with field filter (consistent with dashboard)
   router.push({
     path: '/reports/weather',
     query: { field: field.value.id }
   })
 }
 
-const setFieldAlerts = () => {
-  // Navigate to weather analytics page where alerts can be configured
+const viewWeatherAnalytics = () => {
+  // Navigate to weather reports page with field filter
   router.push({
-    path: '/weather/analytics',
-    query: { field: field.value.id, tab: 'alerts' }
+    path: '/reports/weather',
+    query: { field: field.value.id }
   })
 }
 
@@ -425,12 +424,9 @@ const exportFieldData = async () => {
   }
 }
 
-const compareWithOtherFields = () => {
-  // Navigate to weather analytics page with comparison view
-  router.push({
-    path: '/weather/analytics',
-    query: { compare: true, field: field.value.id }
-  })
+const viewWeatherDashboard = () => {
+  // Navigate to weather dashboard
+  router.push('/weather')
 }
 
 onMounted(() => {
@@ -446,6 +442,7 @@ const loadFieldWeatherData = async (id) => {
     // Load field data
     const fieldResponse = await fieldsAPI.getById(id)
     const fieldData = fieldResponse.data.field || fieldResponse.data.data || fieldResponse.data
+    const farmId = fieldData.farm_id
     
     // Get current crop from plantings if available
     let currentCrop = 'None'
@@ -477,12 +474,18 @@ const loadFieldWeatherData = async (id) => {
       size: size,
       soil_type: fieldData.soil_type || 'Not specified',
       current_crop: currentCrop,
-      location: fieldData.location || fieldData.field_coordinates || {}
+      location: fieldData.location || fieldData.field_coordinates || {},
+      farm_id: farmId
     }
     
-    // Load current weather
+    if (!farmId) {
+      console.error('Field has no farm_id, cannot load farm weather')
+      return
+    }
+
+    // Load current weather using Farm ID
     try {
-      const currentResponse = await weatherAPI.getCurrentWeather(id)
+      const currentResponse = await weatherAPI.getCurrentWeather(farmId)
       const responseData = currentResponse.data
       const weatherData = responseData.weather || responseData.data || responseData
       
@@ -532,9 +535,9 @@ const loadFieldWeatherData = async (id) => {
       console.error('Error loading current weather:', weatherError)
     }
     
-    // Load weather history (last 7 days)
+    // Load weather history (last 7 days) using Farm ID
     try {
-      const historyResponse = await weatherAPI.getHistory(id, 7)
+      const historyResponse = await weatherAPI.getHistory(farmId, 7)
       // Handle paginated response structure
       let historyData = []
       if (historyResponse.data) {
@@ -575,9 +578,9 @@ const loadFieldWeatherData = async (id) => {
       weatherData7d.value = []
     }
     
-    // Load 24h weather data (last 24 hours)
+    // Load 24h weather data (last 24 hours) using Farm ID
     try {
-      const history24hResponse = await weatherAPI.getHistory(id, 1)
+      const history24hResponse = await weatherAPI.getHistory(farmId, 1)
       let history24hData = []
       if (history24hResponse.data) {
         if (history24hResponse.data.weather_logs) {
@@ -594,9 +597,9 @@ const loadFieldWeatherData = async (id) => {
       weatherData24h.value = []
     }
     
-    // Load weather alerts
+    // Load weather alerts using Farm ID
     try {
-      const alertsResponse = await weatherAPI.getAlerts(id)
+      const alertsResponse = await weatherAPI.getAlerts(farmId)
       const alertsData = alertsResponse.data.alerts || alertsResponse.data || []
       fieldAlerts.value = Array.isArray(alertsData) ? alertsData.map((alert, index) => ({
         id: alert.id || index + 1,
@@ -688,11 +691,11 @@ const processedWeatherHistory = computed(() => {
       }
     }
     
-    const temp = item.temperature || 0
+    const temp = parseFloat(item.temperature || 0)
     dailyStats[date].temperatures.push(temp)
-    dailyStats[date].humidities.push(item.humidity || 0)
-    dailyStats[date].rainfalls.push(item.rainfall || item.precipitation || 0)
-    dailyStats[date].windSpeeds.push(item.wind_speed || 0)
+    dailyStats[date].humidities.push(parseFloat(item.humidity || 0))
+    dailyStats[date].rainfalls.push(parseFloat(item.rainfall || item.precipitation || 0))
+    dailyStats[date].windSpeeds.push(parseFloat(item.wind_speed || 0))
   })
   
   // Convert to array with min/max/avg
@@ -830,7 +833,7 @@ const rainfallChartData = computed(() => {
     if (!dailyRainfall[date]) {
       dailyRainfall[date] = 0
     }
-    dailyRainfall[date] += item.rainfall || 0
+    dailyRainfall[date] += parseFloat(item.rainfall || item.precipitation || 0)
   })
   
   return {
