@@ -3,6 +3,8 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Auth\ForgotPassword;
+use App\Http\Controllers\Auth\ResetPassword;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Weather\WeatherController;
 use App\Http\Controllers\Farmer\RiceFarmProfileController;
@@ -24,188 +26,66 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/verify-phone', [\App\Http\Controllers\Auth\VerificationController::class, 'verify']);
 Route::post('/resend-verification', [\App\Http\Controllers\Auth\VerificationController::class, 'resend']);
+Route::post('/forgot-password', [\App\Http\Controllers\Auth\ForgotPassword::class, 'sendResetLinkEmail']);
+Route::post('/reset-password', [\App\Http\Controllers\Auth\ResetPassword::class, 'reset'])->name('password.reset');
+
+// Public marketplace routes (guest browsing)
+Route::prefix('rice-marketplace')->group(function () {
+    Route::get('/products', [\App\Http\Controllers\RiceMarketplaceController::class, 'getProducts']);
+    Route::get('/products/{product}', [\App\Http\Controllers\RiceMarketplaceController::class, 'getProduct']);
+    Route::get('/stats', [\App\Http\Controllers\RiceMarketplaceController::class, 'getMarketplaceStats']);
+    Route::get('/products/{product}/reviews', [\App\Http\Controllers\MarketPlace\ProductReviewController::class, 'index']);
+});
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
     // Proxy routes for PSGC API
-    Route::get('/locations/provinces', function () {
-        try {
-            $response = Http::timeout(10)
-                ->retry(2, 100)
-                ->get('https://psgc.gitlab.io/api/provinces/');
-            
-            if ($response->successful()) {
-                return response()->json($response->json());
-            }
-            
-            \Log::warning('PSGC API returned non-200 status', [
-                'status' => $response->status(),
-                'body' => $response->body()
-            ]);
-            
-            return response()->json([
-                'error' => 'Failed to fetch provinces',
-                'message' => 'Location service temporarily unavailable'
-            ], 503);
-        } catch (\Illuminate\Http\Client\ConnectionException $e) {
-            \Log::error('PSGC API connection failed', ['error' => $e->getMessage()]);
-            return response()->json([
-                'error' => 'Connection failed',
-                'message' => 'Unable to connect to location service'
-            ], 503);
-        } catch (\Exception $e) {
-            \Log::error('PSGC API error', ['error' => $e->getMessage()]);
-            return response()->json([
-                'error' => 'Service error',
-                'message' => 'Location service error occurred'
-            ], 500);
-        }
-    });
+    Route::get('/locations/provinces', [\App\Http\Controllers\Location\LocationController::class, 'getProvinces']);
 
-    Route::get('/locations/provinces/{code}/cities', function ($code) {
-        try {
-            $response = Http::timeout(10)
-                ->retry(2, 100)
-                ->get("https://psgc.gitlab.io/api/provinces/{$code}/cities-municipalities/");
-            
-            if ($response->successful()) {
-                return response()->json($response->json());
-            }
-            
-            \Log::warning('PSGC API returned non-200 status', [
-                'status' => $response->status(),
-                'code' => $code,
-                'body' => $response->body()
-            ]);
-            
-            return response()->json([
-                'error' => 'Failed to fetch cities',
-                'message' => 'Location service temporarily unavailable'
-            ], 503);
-        } catch (\Illuminate\Http\Client\ConnectionException $e) {
-            \Log::error('PSGC API connection failed', ['error' => $e->getMessage(), 'code' => $code]);
-            return response()->json([
-                'error' => 'Connection failed',
-                'message' => 'Unable to connect to location service'
-            ], 503);
-        } catch (\Exception $e) {
-            \Log::error('PSGC API error', ['error' => $e->getMessage(), 'code' => $code]);
-            return response()->json([
-                'error' => 'Service error',
-                'message' => 'Location service error occurred'
-            ], 500);
-        }
-    });
+    Route::get('/locations/provinces/{code}/cities', [\App\Http\Controllers\Location\LocationController::class, 'getCities']);
 
-    Route::get('/locations/cities/{code}/barangays', function ($code) {
-        try {
-            $response = Http::timeout(10)
-                ->retry(2, 100)
-                ->get("https://psgc.gitlab.io/api/cities-municipalities/{$code}/barangays/");
-            
-            if ($response->successful()) {
-                return response()->json($response->json());
-            }
-            
-            \Log::warning('PSGC API returned non-200 status', [
-                'status' => $response->status(),
-                'code' => $code,
-                'body' => $response->body()
-            ]);
-            
-            return response()->json([
-                'error' => 'Failed to fetch barangays',
-                'message' => 'Location service temporarily unavailable'
-            ], 503);
-        } catch (\Illuminate\Http\Client\ConnectionException $e) {
-            \Log::error('PSGC API connection failed', ['error' => $e->getMessage(), 'code' => $code]);
-            return response()->json([
-                'error' => 'Connection failed',
-                'message' => 'Unable to connect to location service'
-            ], 503);
-        } catch (\Exception $e) {
-            \Log::error('PSGC API error', ['error' => $e->getMessage(), 'code' => $code]);
-            return response()->json([
-                'error' => 'Service error',
-                'message' => 'Location service error occurred'
-            ], 500);
-        }
-    });
+    Route::get('/locations/cities/{code}/barangays', [\App\Http\Controllers\Location\LocationController::class, 'getBarangays']);
 
     // Geocoding proxy for Nominatim (to avoid CORS and set User-Agent)
-    Route::get('/geocode', function (Request $request) {
-        $query = $request->query('q');
-        if (!$query) {
-            return response()->json(['error' => 'Query parameter "q" is required'], 400);
-        }
-
-        try {
-            $response = Http::timeout(10)
-                ->retry(2, 100)
-                ->withHeaders([
-                    'User-Agent' => 'RiceFARM Application (https://ricefarm.app)',
-                ])->get('https://nominatim.openstreetmap.org/search', [
-                    'q' => $query,
-                    'format' => 'json',
-                    'limit' => 1,
-                    'countrycodes' => 'ph',
-                ]);
-
-            if ($response->successful()) {
-                $data = $response->json();
-                if (is_array($data)) {
-                    return response()->json($data);
-                }
-                \Log::warning('Nominatim API returned invalid JSON', [
-                    'query' => $query,
-                    'response' => $response->body()
-                ]);
-                return response()->json([
-                    'error' => 'Invalid response format',
-                    'message' => 'Geocoding service returned invalid data'
-                ], 502);
-            }
-            
-            \Log::warning('Nominatim API returned non-200 status', [
-                'status' => $response->status(),
-                'query' => $query,
-                'body' => $response->body()
-            ]);
-            
-            return response()->json([
-                'error' => 'Failed to geocode location',
-                'message' => 'Geocoding service temporarily unavailable'
-            ], 503);
-        } catch (\Illuminate\Http\Client\ConnectionException $e) {
-            \Log::error('Nominatim API connection failed', ['error' => $e->getMessage(), 'query' => $query]);
-            return response()->json([
-                'error' => 'Connection failed',
-                'message' => 'Unable to connect to geocoding service'
-            ], 503);
-        } catch (\Exception $e) {
-            \Log::error('Nominatim API error', ['error' => $e->getMessage(), 'query' => $query]);
-            return response()->json([
-                'error' => 'Service error',
-                'message' => 'Geocoding service error occurred'
-            ], 500);
-        }
-    });
+    Route::get('/geocode', [\App\Http\Controllers\Location\GeocodingController::class, 'geocode']);
 
     // Authentication routes
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
     Route::put('/profile', [AuthController::class, 'updateProfile']);
     Route::put('/change-password', [AuthController::class, 'changePassword']);
+    Route::post('/profile/picture', [AuthController::class, 'uploadProfilePicture']);
+    Route::delete('/profile/picture', [AuthController::class, 'deleteProfilePicture']);
 
     // Dashboard routes
     Route::get('/dashboard', [DashboardController::class, 'index']);
+
+    // Notification routes
+    Route::prefix('notifications')->group(function () {
+        Route::get('/', [\App\Http\Controllers\NotificationController::class, 'index']);
+        Route::get('/unread-count', [\App\Http\Controllers\NotificationController::class, 'unreadCount']);
+        Route::post('/{notification}/read', [\App\Http\Controllers\NotificationController::class, 'markAsRead']);
+        Route::post('/read-all', [\App\Http\Controllers\NotificationController::class, 'markAllAsRead']);
+        Route::delete('/{notification}', [\App\Http\Controllers\NotificationController::class, 'destroy']);
+    });
 
     // Rice Farm Profile routes
     Route::middleware('farmer')->prefix('farmer')->group(function () {
         Route::get('/profile', [RiceFarmProfileController::class, 'getProfile']);
         Route::post('/profile', [RiceFarmProfileController::class, 'createRiceFarmProfile']);
         Route::put('/profile', [RiceFarmProfileController::class, 'updateProfile']);
-    });    
+    });
+
+    // Pest Incident routes
+    Route::middleware('farmer')->prefix('pest-incidents')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Farm\PestIncidentController::class, 'index']);
+        Route::get('/options', [\App\Http\Controllers\Farm\PestIncidentController::class, 'options']);
+        Route::get('/analytics', [\App\Http\Controllers\Farm\PestIncidentController::class, 'analytics']);
+        Route::post('/', [\App\Http\Controllers\Farm\PestIncidentController::class, 'store']);
+        Route::get('/{pestIncident}', [\App\Http\Controllers\Farm\PestIncidentController::class, 'show']);
+        Route::put('/{pestIncident}', [\App\Http\Controllers\Farm\PestIncidentController::class, 'update']);
+        Route::delete('/{pestIncident}', [\App\Http\Controllers\Farm\PestIncidentController::class, 'destroy']);
+    });
 
     // Rice Varieties routes
     Route::prefix('rice-varieties')->group(function () {
@@ -230,66 +110,34 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/dashboard', [WeatherController::class, 'dashboard']);
         Route::get('/rice-dashboard', [WeatherController::class, 'getRiceDashboard']);
         Route::post('/update-all', [WeatherController::class, 'updateAllWeather']);
-        
+
         // ColorfulClouds Weather API proxy (to avoid CORS)
-        Route::get('/colorfulclouds', function (Request $request) {
-            $lat = $request->query('lat');
-            $lon = $request->query('lon');
-            $unit = $request->query('unit', 'imperial');
-            $lang = $request->query('lang', 'en_US');
-            $granu = $request->query('granu', 'realtime');
-            
-            if (!$lat || !$lon) {
-                return response()->json(['error' => 'Latitude and longitude are required'], 400);
-            }
-            
-            try {
-                $token = config('services.colorfulclouds.api_token', 'S45Fnpxcwyq0QT4b');
-                $url = "https://api.caiyunapp.com/v2.5/{$token}/{$lon},{$lat}/weather.json";
-                
-                $response = Http::timeout(10)
-                    ->retry(2, 100)
-                    ->get($url, [
-                        'lang' => $lang,
-                        'unit' => $unit,
-                        'granu' => $granu,
-                    ]);
-                
-                if ($response->successful()) {
-                    return response()->json($response->json());
-                }
-                
-                \Log::warning('ColorfulClouds API returned non-200 status', [
-                    'status' => $response->status(),
-                    'body' => $response->body()
-                ]);
-                
-                return response()->json([
-                    'error' => 'Failed to fetch weather data',
-                    'message' => 'Weather service temporarily unavailable'
-                ], 503);
-            } catch (\Illuminate\Http\Client\ConnectionException $e) {
-                \Log::error('ColorfulClouds API connection failed', ['error' => $e->getMessage()]);
-                return response()->json([
-                    'error' => 'Connection failed',
-                    'message' => 'Unable to connect to weather service'
-                ], 503);
-            } catch (\Exception $e) {
-                \Log::error('ColorfulClouds API error', ['error' => $e->getMessage()]);
-                return response()->json([
-                    'error' => 'Service error',
-                    'message' => 'Weather service error occurred'
-                ], 500);
-            }
-        });
-        
-        Route::prefix('fields/{field}')->group(function () {
+        Route::get('/colorfulclouds', [\App\Http\Controllers\Weather\WeatherProxyController::class, 'getColorfulCloudsWeather']);
+
+        Route::prefix('farms/{farm}')->group(function () {
             Route::get('/current', [WeatherController::class, 'getCurrentWeather']);
             Route::get('/forecast', [WeatherController::class, 'getForecast']);
             Route::get('/history', [WeatherController::class, 'getHistory']);
             Route::get('/alerts', [WeatherController::class, 'getAlerts']);
             Route::get('/rice-analytics', [WeatherController::class, 'getRiceAnalytics']);
             Route::post('/update', [WeatherController::class, 'updateWeather']);
+        });
+
+        // Farm Weather Analytics Routes
+        Route::prefix('analytics/farm/{farm}')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Weather\WeatherAnalyticsController::class, 'getAnalytics']);
+            Route::get('/trends', [\App\Http\Controllers\Weather\WeatherAnalyticsController::class, 'getFarmWeatherTrends']);
+            Route::get('/recommendations', [\App\Http\Controllers\Weather\WeatherAnalyticsController::class, 'getPlantingRecommendations']);
+            Route::get('/climate-impact', [\App\Http\Controllers\Weather\WeatherAnalyticsController::class, 'getClimateChangeImpact']);
+            Route::get('/export', [\App\Http\Controllers\Weather\WeatherAnalyticsController::class, 'exportAnalyticsReport']);
+            
+            // Advanced field-specific/farm-level analytics
+            Route::get('/data-quality', [\App\Http\Controllers\Weather\WeatherAnalyticsController::class, 'getDataQualityMetrics']);
+            Route::get('/impact', [\App\Http\Controllers\Weather\WeatherAnalyticsController::class, 'getWeatherImpactAnalysis']);
+            Route::get('/yield', [\App\Http\Controllers\Weather\WeatherAnalyticsController::class, 'getYieldPredictions']);
+            Route::get('/risk', [\App\Http\Controllers\Weather\WeatherAnalyticsController::class, 'getWeatherRiskAssessment']);
+            Route::get('/irrigation', [\App\Http\Controllers\Weather\WeatherAnalyticsController::class, 'getIrrigationRecommendations']);
+            Route::get('/pest-risk', [\App\Http\Controllers\Weather\WeatherAnalyticsController::class, 'getPestDiseaseRisk']);
         });
     });
 
@@ -309,6 +157,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{planting}', [\App\Http\Controllers\Farm\PlantingController::class, 'show']);
         Route::put('/{planting}', [\App\Http\Controllers\Farm\PlantingController::class, 'update']);
         Route::delete('/{planting}', [\App\Http\Controllers\Farm\PlantingController::class, 'destroy']);
+    });
+
+    // Seed Planting (Nursery) routes
+    Route::middleware('farmer')->prefix('seed-plantings')->group(function () {
+        Route::get('/', [\App\Http\Controllers\SeedPlantingController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\SeedPlantingController::class, 'store']);
+        Route::get('/ready', [\App\Http\Controllers\SeedPlantingController::class, 'getReady']);
+        Route::get('/{seedPlanting}', [\App\Http\Controllers\SeedPlantingController::class, 'show']);
+        Route::put('/{seedPlanting}', [\App\Http\Controllers\SeedPlantingController::class, 'update']);
+        Route::delete('/{seedPlanting}', [\App\Http\Controllers\SeedPlantingController::class, 'destroy']);
     });
 
     // Rice Farming Lifecycle routes
@@ -340,13 +198,37 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/{harvest}', [\App\Http\Controllers\Farm\HarvestController::class, 'destroy']);
     });
 
+    // Post-Harvest Processing routes
+    Route::middleware('farmer')->prefix('post-harvest')->group(function () {
+        Route::get('/harvest/{harvest}', [\App\Http\Controllers\Farm\PostHarvestController::class, 'index']);
+        Route::get('/harvest/{harvest}/efficiency', [\App\Http\Controllers\Farm\PostHarvestController::class, 'efficiency']);
+        Route::post('/', [\App\Http\Controllers\Farm\PostHarvestController::class, 'store']);
+        Route::get('/{process}', [\App\Http\Controllers\Farm\PostHarvestController::class, 'show']);
+        Route::put('/{process}', [\App\Http\Controllers\Farm\PostHarvestController::class, 'update']);
+        Route::post('/{process}/complete', [\App\Http\Controllers\Farm\PostHarvestController::class, 'complete']);
+        Route::delete('/{process}', [\App\Http\Controllers\Farm\PostHarvestController::class, 'destroy']);
+    });
+
     // Labor management routes
-    Route::middleware('farmer')->prefix('laborers')->group(function () {
+    Route::middleware(['auth:sanctum', 'farmer'])->prefix('laborers')->group(function () {
         Route::get('/', [\App\Http\Controllers\Labor\LaborerController::class, 'index']);
         Route::post('/', [\App\Http\Controllers\Labor\LaborerController::class, 'store']);
+
+        // Groups
+        Route::prefix('groups')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Labor\LaborerGroupController::class, 'index']);
+            Route::post('/', [\App\Http\Controllers\Labor\LaborerGroupController::class, 'store']);
+            Route::get('/{laborerGroup}', [\App\Http\Controllers\Labor\LaborerGroupController::class, 'show']);
+            Route::post('/{laborerGroup}/members', [\App\Http\Controllers\Labor\LaborerGroupController::class, 'addMembers']);
+            Route::put('/{laborerGroup}', [\App\Http\Controllers\Labor\LaborerGroupController::class, 'update']);
+            Route::delete('/{laborerGroup}', [\App\Http\Controllers\Labor\LaborerGroupController::class, 'destroy']);
+        });
+
         Route::get('/{laborer}', [\App\Http\Controllers\Labor\LaborerController::class, 'show']);
         Route::put('/{laborer}', [\App\Http\Controllers\Labor\LaborerController::class, 'update']);
         Route::delete('/{laborer}', [\App\Http\Controllers\Labor\LaborerController::class, 'destroy']);
+        Route::post('/{laborer}/photo', [\App\Http\Controllers\Labor\LaborerController::class, 'uploadPhoto']);
+        Route::delete('/{laborer}/photo', [\App\Http\Controllers\Labor\LaborerController::class, 'deletePhoto']);
     });
 
     Route::middleware('farmer')->prefix('labor-wages')->group(function () {
@@ -370,36 +252,81 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/alerts/low-stock', [\App\Http\Controllers\Inventory\InventoryItemController::class, 'lowStockAlerts']);
     });
 
-    // Rice Marketplace routes
+    // Rice Marketplace routes (protected - auth required)
     Route::prefix('rice-marketplace')->group(function () {
-        Route::get('/products', [\App\Http\Controllers\RiceMarketplaceController::class, 'getProducts']);
-        Route::get('/products/{product}', [\App\Http\Controllers\RiceMarketplaceController::class, 'getProduct']);
-        Route::get('/stats', [\App\Http\Controllers\RiceMarketplaceController::class, 'getMarketplaceStats']);
-        
+        // NOTE: Public GET routes for products, stats, and reviews are defined 
+        // OUTSIDE the auth middleware at the top of this file.
+
         // Product management (farmers only)
         Route::middleware('farmer')->group(function () {
             Route::post('/products', [\App\Http\Controllers\RiceMarketplaceController::class, 'createProduct']);
             Route::put('/products/{product}', [\App\Http\Controllers\RiceMarketplaceController::class, 'updateProduct']);
             Route::delete('/products/{product}', [\App\Http\Controllers\RiceMarketplaceController::class, 'deleteProduct']);
-        });
-        
-        // Order management
-        Route::get('/orders', [\App\Http\Controllers\RiceMarketplaceController::class, 'getOrders']);
-        Route::get('/orders/{order}', [\App\Http\Controllers\RiceMarketplaceController::class, 'getOrder']);
 
+            // Farmer order statistics
+            Route::get('/farmer/order-stats', [\App\Http\Controllers\RiceMarketplaceController::class, 'getFarmerOrderStats']);
+
+            // Product image management
+            Route::post('/products/images/upload', [\App\Http\Controllers\MarketPlace\ProductImageController::class, 'upload']);
+            Route::post('/products/images/delete', [\App\Http\Controllers\MarketPlace\ProductImageController::class, 'delete']);
+        });
+
+        // Order management - General
+        Route::get('/orders/{order}', [\App\Http\Controllers\MarketPlace\RiceOrderController::class, 'show']);
+
+        // Buyer order routes
         Route::middleware('buyer')->group(function () {
-            Route::post('/orders', [\App\Http\Controllers\RiceMarketplaceController::class, 'createOrder']);
+            Route::get('/buyer/orders', [\App\Http\Controllers\MarketPlace\RiceOrderController::class, 'buyerOrders']);
+            Route::post('/orders', [\App\Http\Controllers\MarketPlace\RiceOrderController::class, 'store']);
+            Route::post('/orders/{order}/deliver', [\App\Http\Controllers\MarketPlace\RiceOrderController::class, 'confirmDelivery']);
+            Route::post('/orders/{order}/dispute', [\App\Http\Controllers\MarketPlace\RiceOrderController::class, 'dispute']);
+            Route::post('/orders/{order}/cancel', [\App\Http\Controllers\MarketPlace\RiceOrderController::class, 'cancel']);
+
+            // Review routes
+            Route::post('/reviews', [\App\Http\Controllers\MarketPlace\ProductReviewController::class, 'store']);
+            Route::get('/reviews/my', [\App\Http\Controllers\MarketPlace\ProductReviewController::class, 'myReviews']);
+            Route::get('/orders/{order}/can-review', [\App\Http\Controllers\MarketPlace\ProductReviewController::class, 'canReview']);
+
+            // Cart routes
+            Route::get('/cart', [\App\Http\Controllers\MarketPlace\CartController::class, 'index']);
+            Route::get('/cart/count', [\App\Http\Controllers\MarketPlace\CartController::class, 'count']);
+            Route::post('/cart', [\App\Http\Controllers\MarketPlace\CartController::class, 'addItem']);
+            Route::put('/cart/{cartItem}', [\App\Http\Controllers\MarketPlace\CartController::class, 'updateItem']);
+            Route::delete('/cart/{cartItem}', [\App\Http\Controllers\MarketPlace\CartController::class, 'removeItem']);
+            Route::delete('/cart', [\App\Http\Controllers\MarketPlace\CartController::class, 'clear']);
+            Route::post('/cart/checkout', [\App\Http\Controllers\MarketPlace\CartController::class, 'checkout']);
+
+            // Favorites routes
+            Route::get('/favorites', [\App\Http\Controllers\MarketPlace\FavoriteController::class, 'index']);
+            Route::post('/favorites', [\App\Http\Controllers\MarketPlace\FavoriteController::class, 'store']);
+            Route::post('/favorites/toggle', [\App\Http\Controllers\MarketPlace\FavoriteController::class, 'toggle']);
+            Route::get('/favorites/check/{productId}', [\App\Http\Controllers\MarketPlace\FavoriteController::class, 'check']);
+            Route::delete('/favorites/{favorite}', [\App\Http\Controllers\MarketPlace\FavoriteController::class, 'destroy']);
         });
 
+
+        // Farmer order routes
         Route::middleware('farmer')->group(function () {
-            Route::post('/orders/{order}/confirm', [\App\Http\Controllers\RiceMarketplaceController::class, 'confirmOrder']);
-            Route::post('/orders/{order}/cancel', [\App\Http\Controllers\RiceMarketplaceController::class, 'cancelOrder']);
+            Route::get('/farmer/orders', [\App\Http\Controllers\MarketPlace\RiceOrderController::class, 'farmerOrders']);
+            Route::post('/orders/{order}/accept', [\App\Http\Controllers\MarketPlace\RiceOrderController::class, 'accept']);
+            Route::post('/orders/{order}/reject', [\App\Http\Controllers\MarketPlace\RiceOrderController::class, 'reject']);
+            Route::post('/orders/{order}/ready-for-pickup', [\App\Http\Controllers\MarketPlace\RiceOrderController::class, 'markReadyForPickup']);
+            Route::post('/orders/{order}/confirm-pickup', [\App\Http\Controllers\MarketPlace\RiceOrderController::class, 'confirmPickup']);
+            Route::post('/orders/{order}/negotiate', [\App\Http\Controllers\RiceMarketplaceController::class, 'respondToNegotiation']);
+            Route::post('/orders/{order}/mark-paid', [\App\Http\Controllers\MarketPlace\RiceOrderController::class, 'markAsPaid']);
+            Route::post('/orders/{order}/resolve', [\App\Http\Controllers\MarketPlace\RiceOrderController::class, 'resolveDispute']);
         });
 
         // Order messaging
         Route::get('/orders/{order}/messages', [\App\Http\Controllers\RiceOrderMessageController::class, 'index']);
         Route::post('/orders/{order}/messages', [\App\Http\Controllers\RiceOrderMessageController::class, 'store']);
+
+        // Price negotiations
+        Route::get('/orders/{order}/negotiations', [\App\Http\Controllers\PriceNegotiationController::class, 'index']);
+        Route::post('/orders/{order}/negotiations', [\App\Http\Controllers\PriceNegotiationController::class, 'propose']);
+        Route::post('/negotiations/{negotiation}/respond', [\App\Http\Controllers\PriceNegotiationController::class, 'respond']);
     });
+
 
     // Legacy Marketplace routes (for backward compatibility)
     Route::prefix('marketplace')->group(function () {
@@ -407,7 +334,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/products/{product}', [\App\Http\Controllers\MarketPlace\ProductController::class, 'show']);
         Route::get('/categories', [\App\Http\Controllers\MarketPlace\ProductController::class, 'index']);
         Route::get('/categories/{category}/products', [\App\Http\Controllers\MarketPlace\ProductController::class, 'getByCategory']);
-        
+
         // Cart management (simplified - using session for now)
         Route::prefix('cart')->group(function () {
             Route::get('/', [\App\Http\Controllers\MarketPlace\ProductController::class, 'getAvailableProducts']);
@@ -430,6 +357,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Sales management routes
     Route::middleware('farmer')->prefix('sales')->group(function () {
         Route::get('/', [\App\Http\Controllers\MarketPlace\SaleController::class, 'index']);
+        Route::get('/summary', [\App\Http\Controllers\MarketPlace\SaleController::class, 'summary']);
         Route::post('/', [\App\Http\Controllers\MarketPlace\SaleController::class, 'store']);
         Route::get('/{sale}', [\App\Http\Controllers\MarketPlace\SaleController::class, 'show']);
         Route::put('/{sale}', [\App\Http\Controllers\MarketPlace\SaleController::class, 'update']);
@@ -438,6 +366,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Financial management routes
     Route::middleware('farmer')->prefix('expenses')->group(function () {
+        Route::get('/summary', [\App\Http\Controllers\Financial\ExpenseController::class, 'summary']);
         Route::get('/', [\App\Http\Controllers\Financial\ExpenseController::class, 'index']);
         Route::post('/', [\App\Http\Controllers\Financial\ExpenseController::class, 'store']);
         Route::get('/{expense}', [\App\Http\Controllers\Financial\ExpenseController::class, 'show']);
@@ -448,16 +377,39 @@ Route::middleware('auth:sanctum')->group(function () {
     // Rice Farming Analytics routes
     Route::middleware('farmer')->prefix('analytics')->group(function () {
         Route::get('/rice-farming', [\App\Http\Controllers\RiceFarmingAnalyticsController::class, 'getRiceFarmingAnalytics']);
+        Route::get('/data-analysis', [\App\Http\Controllers\Analytics\DataAnalysisController::class, 'getComprehensiveAnalytics']);
     });
 
     // Reports routes
     Route::middleware('farmer')->prefix('reports')->group(function () {
         Route::get('/financial', [\App\Http\Controllers\Reports\ReportController::class, 'getFinancialReport']);
         Route::get('/crop-yield', [\App\Http\Controllers\Reports\ReportController::class, 'getCropYieldReport']);
+        Route::get('/crop-yield/filter-options', [\App\Http\Controllers\Reports\ReportController::class, 'getCropYieldFilterOptions']);
         Route::get('/weather', [\App\Http\Controllers\Reports\ReportController::class, 'getWeatherReport']);
-        Route::get('/labor-cost', [\App\Http\Controllers\Labor\WageController::class, 'index']);
+        Route::get('/labor-cost', [\App\Http\Controllers\Reports\ReportController::class, 'generateLaborReport']);
         Route::get('/weather-analysis', [\App\Http\Controllers\Weather\WeatherController::class, 'dashboard']);
-        Route::get('/inventory-usage', [\App\Http\Controllers\Inventory\InventoryItemController::class, 'index']);
+        Route::get('/inventory-usage', [\App\Http\Controllers\Reports\ReportController::class, 'generateInventoryReport']);
+
+        // CSV Export routes
+        Route::get('/export/expenses', [\App\Http\Controllers\Reports\ReportController::class, 'exportExpensesCsv']);
+        Route::get('/export/inventory', [\App\Http\Controllers\Reports\ReportController::class, 'exportInventoryCsv']);
+        Route::get('/export/sales', [\App\Http\Controllers\Reports\ReportController::class, 'exportSalesCsv']);
+
+        // Profit/Loss routes
+        Route::get('/profit-loss', [\App\Http\Controllers\Reports\ProfitLossController::class, 'summary']);
+        Route::get('/profit-loss/by-planting', [\App\Http\Controllers\Reports\ProfitLossController::class, 'byPlanting']);
+    });
+
+
+
+    // Buyer management routes
+    Route::middleware('farmer')->prefix('buyers')->group(function () {
+        Route::get('/', [\App\Http\Controllers\MarketPlace\BuyerController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\MarketPlace\BuyerController::class, 'store']);
+        Route::get('/{buyer}', [\App\Http\Controllers\MarketPlace\BuyerController::class, 'show']);
+        Route::put('/{buyer}', [\App\Http\Controllers\MarketPlace\BuyerController::class, 'update']);
+        Route::delete('/{buyer}', [\App\Http\Controllers\MarketPlace\BuyerController::class, 'destroy']);
+        Route::get('/{buyer}/sales-history', [\App\Http\Controllers\MarketPlace\BuyerController::class, 'salesHistory']);
     });
 
 });

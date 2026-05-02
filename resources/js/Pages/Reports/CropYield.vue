@@ -8,12 +8,37 @@
           <p class="text-gray-600 mt-2">Analyze your crop production and yield data</p>
         </div>
         <div class="flex space-x-3">
-          <button
-            @click="exportReport"
-            class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
-          >
-            Export Report
-          </button>
+          <div class="relative">
+            <button
+              @click="showExportMenu = !showExportMenu"
+              class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 flex items-center gap-2"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div
+              v-if="showExportMenu"
+              class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border border-gray-200"
+            >
+              <button
+                @click="exportToPDF"
+                class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+              >
+                📄 Export as PDF
+              </button>
+              <button
+                @click="exportReport"
+                class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+              >
+                📊 Export as CSV
+              </button>
+            </div>
+          </div>
           <button
             @click="generateReport"
             class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -32,10 +57,11 @@
             <select
               v-model="selectedSeason"
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              :disabled="isLoadingFilters"
             >
-              <option value="2024">2024 Season</option>
-              <option value="2023">2023 Season</option>
-              <option value="2022">2022 Season</option>
+              <option v-for="season in seasonOptions" :key="season.value" :value="season.value">
+                {{ season.label }}
+              </option>
             </select>
           </div>
           <div>
@@ -43,12 +69,12 @@
             <select
               v-model="selectedCrop"
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              :disabled="isLoadingFilters"
             >
               <option value="">All Crops</option>
-              <option value="corn">Corn</option>
-              <option value="wheat">Wheat</option>
-              <option value="soybeans">Soybeans</option>
-              <option value="rice">Rice</option>
+              <option v-for="crop in cropOptions" :key="crop.value" :value="crop.value">
+                {{ crop.label }}
+              </option>
             </select>
           </div>
           <div>
@@ -56,23 +82,26 @@
             <select
               v-model="selectedField"
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              :disabled="isLoadingFilters"
             >
               <option value="">All Fields</option>
-              <option value="north">North Field</option>
-              <option value="south">South Field</option>
-              <option value="east">East Field</option>
+              <option v-for="field in fieldOptions" :key="field.value" :value="field.value">
+                {{ field.label }}
+              </option>
             </select>
           </div>
           <div class="flex items-end">
             <button
               @click="updateReport"
               class="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              :disabled="isLoadingFilters"
             >
               Update Report
             </button>
           </div>
         </div>
       </div>
+
 
       <!-- Yield Summary -->
       <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
@@ -85,7 +114,7 @@
             </div>
             <div class="ml-4">
               <div class="text-2xl font-bold text-gray-900">{{ yieldSummary.totalYield.toLocaleString() }}</div>
-              <div class="text-sm text-gray-600">Total Yield (kg)</div>
+              <div class="text-sm text-gray-600">Total Yield ({{ yieldUnit }})</div>
             </div>
           </div>
         </div>
@@ -99,7 +128,7 @@
             </div>
             <div class="ml-4">
               <div class="text-2xl font-bold text-gray-900">{{ yieldSummary.avgYieldPerAcre.toFixed(1) }}</div>
-              <div class="text-sm text-gray-600">Avg Yield/Hectare (kg)</div>
+              <div class="text-sm text-gray-600">Avg Yield/Hectare ({{ yieldUnit }})</div>
             </div>
           </div>
         </div>
@@ -156,10 +185,10 @@
             >
               <div class="flex justify-between items-start mb-2">
                 <h3 class="font-medium text-gray-900">{{ field.name }}</h3>
-                <span class="text-sm font-medium text-green-600">{{ field.yieldPerAcre.toFixed(1) }} kg/ha</span>
+                <span class="text-sm font-medium text-green-600">{{ field.yieldPerAcre.toFixed(1) }} {{ yieldUnit }}/ha</span>
               </div>
               <div class="flex justify-between text-sm text-gray-600">
-                <span>Total Yield: {{ field.totalYield.toLocaleString() }} kg</span>
+                <span>Total Yield: {{ field.totalYield.toLocaleString() }} {{ yieldUnit }}</span>
                 <span>Area: {{ field.area }} ha</span>
               </div>
               <div class="mt-2">
@@ -185,7 +214,7 @@
                 <tr>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Crop</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area (ha)</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Yield (kg)</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Yield ({{ yieldUnit }})</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Yield/Hectare</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Market Price</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Value</th>
@@ -200,13 +229,13 @@
                     {{ crop.area }}
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {{ crop.totalYield.toLocaleString() }} kg
+                    {{ crop.totalYield.toLocaleString() }} {{ yieldUnit }}
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {{ crop.yieldPerAcre.toFixed(1) }} kg/ha
+                    {{ crop.yieldPerAcre.toFixed(1) }} {{ yieldUnit }}/ha
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {{ formatCurrency(crop.marketPrice) }}/kg
+                    {{ formatCurrency(crop.marketPrice) }}/{{ yieldUnit }}
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
                     {{ formatCurrency(crop.totalValue) }}
@@ -286,10 +315,18 @@ import { ref, onMounted, computed } from 'vue'
 import { formatCurrency } from '@/utils/format'
 import { reportsAPI } from '@/services/api'
 import LineChart from '@/Components/Charts/LineChart.vue'
+import { pdfExport } from '@/utils/pdfExport'
 
-const selectedSeason = ref('2024')
+const selectedSeason = ref('')
 const selectedCrop = ref('')
 const selectedField = ref('')
+const showExportMenu = ref(false)
+
+// Filter options from API
+const seasonOptions = ref([])
+const cropOptions = ref([])
+const fieldOptions = ref([])
+const isLoadingFilters = ref(false)
 
 const yieldSummary = ref({
   totalYield: 0,
@@ -301,6 +338,7 @@ const yieldSummary = ref({
 const fieldPerformance = ref([])
 
 const cropComparison = ref([])
+const yieldUnit = ref('kg')
 
 const updateReport = async () => {
   // Reload report data with current filters
@@ -324,7 +362,32 @@ const generateReport = async () => {
   }
 }
 
+const exportToPDF = () => {
+  showExportMenu.value = false
+  try {
+    pdfExport.exportCropYieldReport({
+      totalHarvests: cropComparison.value.length,
+      totalYield: yieldSummary.value.totalYield,
+      avgYieldPerHa: yieldSummary.value.avgYieldPerAcre,
+      harvests: cropComparison.value.map(c => ({
+        harvest_date: selectedSeason.value,
+        field_name: c.name,
+        variety_name: c.name,
+        yield: c.totalYield,
+        quality_grade: 'N/A'
+      }))
+    }, {
+      title: `Crop Yield Report - Season ${selectedSeason.value}`
+    })
+    alert('PDF exported successfully!')
+  } catch (error) {
+    console.error('Failed to export PDF:', error)
+    alert('Failed to export PDF')
+  }
+}
+
 const exportReport = () => {
+  showExportMenu.value = false
   // Export report as CSV
   try {
     const csvContent = generateCSV()
@@ -346,7 +409,7 @@ const exportReport = () => {
 
 const generateCSV = () => {
   // Generate CSV content from yield data
-  const headers = ['Crop', 'Area (hectares)', 'Total Yield (kg)', 'Yield per Hectare', 'Market Price', 'Total Value']
+  const headers = ['Crop', 'Area (hectares)', `Total Yield (${yieldUnit.value})`, 'Yield per Hectare', 'Market Price', 'Total Value']
   const rows = cropComparison.value.map(item => [
     item.name || 'N/A',
     item.area || 0,
@@ -372,7 +435,7 @@ const yieldChartData = computed(() => {
   return {
     labels: yieldTrends.value.map(item => item.month),
     datasets: [{
-      label: 'Yield (kg)',
+      label: `Yield (${yieldUnit.value})`,
       data: yieldTrends.value.map(item => item.yield),
       borderColor: 'rgb(34, 197, 94)',
       backgroundColor: 'rgba(34, 197, 94, 0.1)',
@@ -382,15 +445,70 @@ const yieldChartData = computed(() => {
   }
 })
 
-onMounted(() => {
-  // Load crop yield data from API
-  loadYieldData()
+onMounted(async () => {
+  // Load filter options first, then yield data
+  await loadFilterOptions()
+  await loadYieldData()
 })
+
+const loadFilterOptions = async () => {
+  isLoadingFilters.value = true
+  try {
+    const response = await reportsAPI.getCropYieldFilterOptions()
+    const data = response.data.data || response.data
+    
+    if (data.seasons && data.seasons.length > 0) {
+      seasonOptions.value = data.seasons
+      // Set default to first (most recent) season if not already set
+      if (!selectedSeason.value) {
+        selectedSeason.value = data.seasons[0].value
+      }
+    } else {
+      // Fallback to current year if no data
+      const currentYear = new Date().getFullYear()
+      seasonOptions.value = [
+        { value: String(currentYear), label: `${currentYear} Season` },
+        { value: String(currentYear - 1), label: `${currentYear - 1} Season` },
+        { value: String(currentYear - 2), label: `${currentYear - 2} Season` }
+      ]
+      selectedSeason.value = String(currentYear)
+    }
+    
+    if (data.crops) {
+      cropOptions.value = data.crops
+    }
+    
+    if (data.fields) {
+      fieldOptions.value = data.fields
+    }
+  } catch (error) {
+    console.error('Error loading filter options:', error)
+    // Set fallback options on error
+    const currentYear = new Date().getFullYear()
+    seasonOptions.value = [
+      { value: String(currentYear), label: `${currentYear} Season` },
+      { value: String(currentYear - 1), label: `${currentYear - 1} Season` },
+      { value: String(currentYear - 2), label: `${currentYear - 2} Season` }
+    ]
+    selectedSeason.value = String(currentYear)
+  } finally {
+    isLoadingFilters.value = false
+  }
+}
 
 const loadYieldData = async () => {
   try {
-    const period = selectedSeason.value === '2024' ? 365 : selectedSeason.value === '2023' ? 730 : 1095
-    const response = await reportsAPI.getCropYieldReport(period)
+    // Calculate period based on selected season
+    const currentYear = new Date().getFullYear()
+    const selectedYear = parseInt(selectedSeason.value) || currentYear
+    const yearsAgo = currentYear - selectedYear
+    const period = Math.max(365, (yearsAgo + 1) * 365)
+    
+    const response = await reportsAPI.getCropYieldReport({
+      period,
+      crop: selectedCrop.value,
+      field: selectedField.value
+    })
     const data = response.data.data || response.data
     
     if (data.yield_summary) {
@@ -424,6 +542,10 @@ const loadYieldData = async () => {
     
     if (data.yield_trends) {
       yieldTrends.value = data.yield_trends
+    }
+
+    if (data.yield_unit) {
+      yieldUnit.value = data.yield_unit
     }
   } catch (error) {
     console.error('Error loading yield data:', error)

@@ -1,5 +1,57 @@
 <template>
-  <div class="bg-white rounded-lg shadow-lg p-6 flex flex-col h-full">
+  <!-- Compact Mode -->
+  <div v-if="compact" class="bg-white rounded-lg shadow px-4 py-3">
+     <!-- Loading -->
+     <div v-if="loading && !weather" class="flex items-center justify-center w-full py-2">
+       <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-green-600"></div>
+     </div>
+     <!-- Weather Data -->
+     <template v-else-if="weather">
+       <div class="flex items-center justify-between">
+         <div class="flex items-center space-x-3">
+           <span class="text-2xl">{{ getWeatherIcon(weather.conditions) }}</span>
+           <div>
+             <span class="text-xl font-bold text-gray-900">{{ Math.round(weather.temperature) }}°C</span>
+             <span class="text-sm text-gray-500 ml-2 capitalize">{{ weather.conditions }}</span>
+           </div>
+         </div>
+         <div class="flex items-center space-x-4 text-xs text-gray-500">
+           <div class="flex items-center" title="Humidity">
+             <span class="text-blue-500 mr-1">💧</span>{{ weather.humidity }}%
+           </div>
+           <div class="flex items-center" title="Wind">
+             <span class="mr-1">💨</span>{{ weather.wind_speed }} km/h
+           </div>
+         </div>
+       </div>
+       <!-- Alert Banner (if any) -->
+       <div v-if="alerts.length > 0" class="mt-2 flex flex-wrap gap-1">
+         <span 
+           v-for="(alert, index) in alerts.slice(0, 2)" 
+           :key="index"
+           :class="[
+             'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
+             alert.severity === 'high' || alert.severity === 'critical' ? 'bg-red-100 text-red-800' :
+             alert.severity === 'medium' ? 'bg-orange-100 text-orange-800' : 'bg-yellow-100 text-yellow-800'
+           ]"
+         >
+           {{ getAlertIcon(alert.type) }} {{ alert.title || alert.message }}
+         </span>
+         <span v-if="alerts.length > 2" class="text-xs text-gray-500">+{{ alerts.length - 2 }} more</span>
+       </div>
+       <!-- Farming Advice (always shown) -->
+       <div class="mt-2 text-xs" :class="isFavorableForFarming ? 'text-green-600' : 'text-orange-600'">
+         💡 {{ getFarmingAdvice() }}
+       </div>
+     </template>
+     <!-- No Data/Error -->
+     <div v-else class="text-xs text-gray-500 text-center w-full py-2">
+       No weather data
+     </div>
+  </div>
+
+  <!-- Full Mode (Original) -->
+  <div v-else class="bg-white rounded-lg shadow-lg p-6 flex flex-col h-full">
     <div class="flex items-center justify-between mb-4">
       <div>
         <h3 class="text-lg font-semibold text-gray-900">Current Weather</h3>
@@ -172,9 +224,13 @@ import { useWeatherStore } from '@/stores/weather';
 import { useFarmStore } from '@/stores/farm';
 
 const props = defineProps({
-  fieldId: {
+  farmId: {
     type: [String, Number],
     required: true
+  },
+  compact: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -221,8 +277,8 @@ const isFavorableForFarming = computed(() => {
 });
 
 const refreshWeather = async () => {
-  if (!props.fieldId) {
-    error.value = 'No field ID provided';
+  if (!props.farmId) {
+    error.value = 'No farm ID provided';
     return;
   }
   
@@ -232,8 +288,8 @@ const refreshWeather = async () => {
   try {
     // Use Promise.allSettled to prevent one failure from breaking everything
     const results = await Promise.allSettled([
-      weatherStore.fetchCurrentWeather(props.fieldId),
-      weatherStore.fetchWeatherAlerts(props.fieldId)
+      weatherStore.fetchCurrentWeather(props.farmId),
+      weatherStore.fetchWeatherAlerts(props.farmId)
     ]);
     
     // Check if any promises were rejected

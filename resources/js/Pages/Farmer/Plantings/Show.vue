@@ -1,24 +1,26 @@
 <template>
-  <div class="min-h-screen bg-gray-50">
-    <header class="bg-white shadow-sm border-b border-gray-200">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between py-6 gap-4">
-          <div class="flex items-center gap-3">
-            <button @click="goBack" class="text-gray-500 hover:text-gray-700">
-              <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <div>
-              <h1 class="text-2xl font-semibold text-gray-900">
-                {{ planting ? planting.crop_type : 'Planting Details' }}
-              </h1>
-              <p class="text-sm text-gray-500">
-                {{ planting ? `On Field: ${planting.field?.name}` : 'Loading...' }}
-              </p>
-            </div>
-          </div>
-          <div class="flex items-center gap-3" v-if="planting">
+  <div class="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 py-10 px-4 sm:px-6 lg:px-8">
+    <div class="w-full mx-auto space-y-8">
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <button
+            type="button"
+            @click="goBack"
+            class="inline-flex items-center text-sm font-medium text-emerald-700 hover:text-emerald-900 transition-colors"
+          >
+            <svg class="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Plantings
+          </button>
+          <h1 class="mt-4 text-3xl font-bold text-gray-900">
+             {{ planting ? planting.crop_type : 'Planting Details' }}
+          </h1>
+          <p class="mt-2 text-base text-gray-600 max-w-2xl">
+             {{ planting ? `On Field: ${planting.field?.name}` : 'Loading...' }}
+          </p>
+        </div>
+        <div class="flex items-center gap-3" v-if="planting">
             <button
               @click="goToEdit(planting.id)"
               class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
@@ -26,17 +28,57 @@
               Edit
             </button>
             <button
-              @click="confirmDelete(planting)"
+              v-if="planting.status !== 'failed' && planting.status !== 'harvested'"
+              @click="openFailModal"
               class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md bg-red-600 text-white hover:bg-red-700"
+            >
+              💀 Mark as Failed
+            </button>
+            <button
+              @click="confirmDelete(planting)"
+              class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md border border-red-300 text-red-700 bg-white hover:bg-red-50"
             >
               Delete
             </button>
           </div>
+      </div>
+
+
+      <!-- Failed State Banner -->
+      <div v-if="planting && planting.status === 'failed'"
+           class="bg-red-50 border border-red-300 rounded-xl p-4 flex items-start gap-3">
+        <span class="text-2xl">💀</span>
+        <div class="flex-1">
+          <p class="text-sm font-semibold text-red-800">
+            This planting was marked as failed
+            <span v-if="planting.failed_at"> on {{ formatDate(planting.failed_at) }}</span>.
+          </p>
+          <p v-if="planting.failure_category" class="text-sm text-red-700 mt-0.5">
+            Category: {{ formatStatus(planting.failure_category) }}
+          </p>
+          <p v-if="planting.failure_reason" class="text-sm text-red-700 mt-0.5">
+            Reason: {{ planting.failure_reason }}
+          </p>
+          <p class="text-xs text-red-500 mt-1">
+            A crop loss expense has been automatically recorded in your financials.
+          </p>
+        </div>
+        <div class="flex flex-col gap-2 shrink-0">
+          <button
+            @click="openEditFailModal"
+            class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border border-red-300 text-red-700 bg-white hover:bg-red-50 transition-colors"
+          >
+            ✏️ Edit Details
+          </button>
+          <button
+            @click="showUnfailModal = true"
+            class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border border-orange-300 text-orange-700 bg-white hover:bg-orange-50 transition-colors"
+          >
+            ↩ Un-Fail
+          </button>
         </div>
       </div>
-    </header>
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div v-if="loading" class="bg-white shadow sm:rounded-lg p-12 text-center">
         <LoadingSpinner text="Loading planting details..." />
       </div>
@@ -54,6 +96,120 @@
 
       <div v-else-if="planting" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div class="lg:col-span-2 space-y-6">
+          
+          <!-- Lifecycle / Stage Management Card -->
+          <div class="bg-white shadow sm:rounded-lg border-l-4 border-green-500">
+            <div class="px-4 py-5 sm:p-6">
+              <div class="sm:flex sm:items-center sm:justify-between">
+                <div>
+                  <h3 class="text-lg font-medium leading-6 text-gray-900">Current Growth Stage</h3>
+                  <div class="mt-2 max-w-xl text-sm text-gray-500">
+                    <p v-if="currentStage">
+                      Currently in <span class="font-bold text-green-700">{{ currentStage.rice_growth_stage?.name }}</span> stage.
+                    </p>
+                    <p v-else class="text-amber-600">No active stage found. Planting may be completed or planned.</p>
+                  </div>
+                </div>
+                <div class="mt-5 sm:mt-0 sm:ml-6 sm:flex-shrink-0">
+                  <button
+                    v-if="canAdvanceStage"
+                    @click="openAdvanceModal"
+                    type="button"
+                    class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:text-sm"
+                  >
+                    Advance to Next Stage
+                  </button>
+                  <span v-else-if="planting.status === 'ready'" class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-teal-100 text-teal-800">
+                    Ready for Harvest
+                  </span>
+                </div>
+              </div>
+
+              <!-- Stage Metrics -->
+              <div class="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-3" v-if="currentStage">
+                <div class="px-4 py-3 bg-gray-50 rounded-lg border border-gray-100">
+                  <dt class="text-xs font-medium text-gray-500 uppercase tracking-wider">Started Date</dt>
+                  <dd class="mt-1 text-lg font-semibold text-gray-900">{{ formatDate(currentStage.started_at) }}</dd>
+                </div>
+                <div class="px-4 py-3 bg-gray-50 rounded-lg border border-gray-100">
+                  <dt class="text-xs font-medium text-gray-500 uppercase tracking-wider">Days in Stage</dt>
+                  <dd class="mt-1 text-lg font-semibold text-gray-900">{{ daysInStage }} days</dd>
+                </div>
+                <div class="px-4 py-3 bg-gray-50 rounded-lg border border-gray-100">
+                  <dt class="text-xs font-medium text-gray-500 uppercase tracking-wider">Est. Completion</dt>
+                  <dd class="mt-1 text-lg font-semibold text-gray-900">
+                    {{ lifecycleStatus?.next_stage ? 'Next: ' + lifecycleStatus.next_stage.name : 'Final Stage' }}
+                  </dd>
+                </div>
+              </div>
+              
+              <!-- Timeline / Progress Bar -->
+              <div class="mt-6" v-if="stageTimeline.length > 0">
+                <h4 class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Lifecycle Progress</h4>
+                <div class="relative">
+                  <div class="overflow-hidden h-2 mb-4 text-xs flex rounded bg-gray-200">
+                    <div 
+                      :style="{ width: `${lifecycleStatus?.progress_percentage || 0}%` }" 
+                      class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-green-500 transition-all duration-500"
+                    ></div>
+                  </div>
+                  <div class="flex justify-between text-xs text-gray-400">
+                    <span>Planted</span>
+                    <span>Harvest</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Growth Stages History -->
+          <div class="bg-white shadow sm:rounded-lg">
+            <div class="px-4 py-5 sm:p-6">
+              <h3 class="text-lg font-medium leading-6 text-gray-900 mb-6">Growth Stages History</h3>
+              <div class="flow-root">
+                <ul role="list" class="-mb-8">
+                  <li v-for="(stage, stageIdx) in stageTimeline" :key="stage.id">
+                    <div class="relative pb-8">
+                      <span v-if="stageIdx !== stageTimeline.length - 1" class="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200" aria-hidden="true"></span>
+                      <div class="relative flex space-x-3">
+                        <div>
+                          <span 
+                            class="h-8 w-8 rounded-full flex items-center justify-center ring-8 ring-white"
+                            :class="{
+                              'bg-green-500': stage.status === 'completed',
+                              'bg-blue-500': stage.status === 'in_progress',
+                              'bg-gray-200': stage.status === 'pending'
+                            }"
+                          >
+                            <svg v-if="stage.status === 'completed'" class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span v-else-if="stage.status === 'in_progress'" class="h-2.5 w-2.5 bg-white rounded-full"></span>
+                          </span>
+                        </div>
+                        <div class="min-w-0 flex-1 pt-1.5 flex justify-between space-x-4">
+                          <div>
+                            <p class="text-sm text-gray-500">
+                              <span class="font-medium text-gray-900">{{ stage.rice_growth_stage?.name }}</span>
+                            </p>
+                            <p class="text-sm text-gray-500">{{ stage.rice_growth_stage?.description }}</p>
+                            <div v-if="stage.notes" class="mt-1 text-sm text-gray-600 bg-gray-50 p-2 rounded inline-block">{{ stage.notes }}</div>
+                          </div>
+                          <div class="text-right text-sm whitespace-nowrap text-gray-500">
+                            <span v-if="stage.status === 'completed'" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Completed: {{ formatDate(stage.completed_at) }}</span>
+                            <span v-else-if="stage.status === 'in_progress'" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">Started: {{ formatDate(stage.started_at) }}</span>
+                            <span v-else class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Pending</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
           <div class="bg-white shadow sm:rounded-lg">
             <div class="px-4 py-5 sm:p-6">
               <div class="flex justify-between items-start">
@@ -101,7 +257,7 @@
                 </div>
                 <div class="sm:col-span-1">
                   <dt class="text-sm font-medium text-gray-500">Seed Quantity</dt>
-                  <dd class="mt-1 text-sm text-gray-900">{{ planting.seed_rate || 'N/A' }} kg</dd>
+                  <dd class="mt-1 text-sm text-gray-900">{{ planting.seed_rate || 'N/A' }} {{ planting.seed_unit || 'packets' }}</dd>
                 </div>
               </dl>
               
@@ -146,15 +302,188 @@
           </div>
         </div>
       </div>
-    </main>
+
+    </div>
+
+    <!-- Confirmation Modal -->
+    <ConfirmationModal
+      :show="showConfirmModal"
+      title="Delete Planting"
+      :message="`Are you sure you want to delete ${plantingToDelete?.crop_type || 'this planting'}? This action cannot be undone.`"
+      confirm-text="Delete"
+      type="danger"
+      @close="showConfirmModal = false"
+      @confirm="deletePlanting"
+    />
+
+    <!-- Advance Stage Modal -->
+    <div v-if="showAdvanceModal" class="fixed z-50 inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+      <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" @click="showAdvanceModal = false"></div>
+
+        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+        <div class="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+          <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+            <div class="sm:flex sm:items-start">
+              <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-green-100 sm:mx-0 sm:h-10 sm:w-10">
+                <svg class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+              </div>
+              <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+                  Advance to Next Stage
+                </h3>
+                <div class="mt-2">
+                  <p class="text-sm text-gray-500">
+                    Are you sure you want to complete the <strong>{{ currentStage?.rice_growth_stage?.name }}</strong> stage?
+                  </p>
+                  <p class="text-sm text-gray-500 mt-1" v-if="lifecycleStatus?.next_stage">
+                    The next stage will be <strong>{{ lifecycleStatus.next_stage.name }}</strong>.
+                  </p>
+                  
+                  <div class="mt-4">
+                    <label for="stage-notes" class="block text-sm font-medium text-gray-700">Notes (Optional)</label>
+                    <textarea
+                      id="stage-notes"
+                      v-model="advanceNotes"
+                      rows="3"
+                      class="shadow-sm focus:ring-green-500 focus:border-green-500 mt-1 block w-full sm:text-sm border-gray-300 rounded-md"
+                      placeholder="Any observations about this stage..."
+                    ></textarea>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+            <button
+              type="button"
+              class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:ml-3 sm:w-auto sm:text-sm"
+              @click="confirmAdvanceStage"
+              :disabled="advanceLoading"
+            >
+              <span v-if="advanceLoading">Processing...</span>
+              <span v-else>Confirm & Advance</span>
+            </button>
+            <button
+              type="button"
+              class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+              @click="showAdvanceModal = false"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
+
+  <!-- Mark as Failed Modal -->
+  <div v-if="showFailModal" class="fixed z-50 inset-0 overflow-y-auto" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div class="fixed inset-0 bg-gray-500 bg-opacity-75" @click="showFailModal = false"></div>
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+      <div class="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+        <div class="bg-red-50 px-6 pt-5 pb-4">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+              <span class="text-xl">💀</span>
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900">Mark Planting as Failed</h3>
+              <p class="text-sm text-gray-500">This will cancel all tasks, update the field status, and record a crop loss expense.</p>
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Failure Category</label>
+              <select v-model="failForm.failure_category"
+                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 outline-none">
+                <option value="">— Select a category —</option>
+                <option value="pest_disease">Pest / Disease</option>
+                <option value="weather">Weather (General)</option>
+                <option value="flood">Flood</option>
+                <option value="drought">Drought</option>
+                <option value="poor_germination">Poor Germination</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Reason <span class="text-gray-400">(optional)</span></label>
+              <textarea
+                v-model="failForm.failure_reason"
+                rows="3"
+                placeholder="Describe what happened..."
+                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 outline-none resize-none"
+              ></textarea>
+            </div>
+            <p v-if="failError" class="text-sm text-red-600">{{ failError }}</p>
+          </div>
+        </div>
+        <div class="bg-gray-50 px-6 py-3 flex flex-row-reverse gap-3">
+          <button @click="submitFail" :disabled="failLoading"
+            class="inline-flex justify-center px-5 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
+            {{ failLoading ? 'Marking...' : 'Confirm Failure' }}
+          </button>
+          <button @click="showFailModal = false"
+            class="inline-flex justify-center px-5 py-2 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Un-Fail Confirmation Modal -->
+  <div v-if="showUnfailModal" class="fixed z-50 inset-0 overflow-y-auto" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div class="fixed inset-0 bg-gray-500 bg-opacity-75" @click="showUnfailModal = false"></div>
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+      <div class="relative z-10 inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full">
+        <div class="bg-orange-50 px-6 pt-5 pb-4">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
+              <span class="text-xl">↩</span>
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900">Revert Planting to Growing</h3>
+              <p class="text-sm text-gray-500">This will undo the failure and restore the planting.</p>
+            </div>
+          </div>
+          <ul class="text-sm text-gray-600 space-y-1 mt-3 bg-white border border-orange-200 rounded-lg p-3">
+            <li>✅ Planting status → <strong>Growing</strong></li>
+            <li>✅ Field status → <strong>Active</strong></li>
+            <li>✅ Growth stages restored to last active stage</li>
+            <li>✅ Crop loss expense will be <strong>voided</strong></li>
+          </ul>
+          <p v-if="unfailError" class="text-sm text-red-600 mt-2">{{ unfailError }}</p>
+        </div>
+        <div class="bg-gray-50 px-6 py-3 flex flex-row-reverse gap-3">
+          <button @click="submitUnfail" :disabled="unfailLoading"
+            class="inline-flex justify-center px-5 py-2 text-sm font-medium rounded-lg bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50">
+            {{ unfailLoading ? 'Reverting...' : 'Confirm Revert' }}
+          </button>
+          <button @click="showUnfailModal = false"
+            class="inline-flex justify-center px-5 py-2 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useFarmStore } from '@/stores/farm'
 import LoadingSpinner from '@/Components/UI/LoadingSpinner.vue'
+import ConfirmationModal from '@/Components/UI/ConfirmationModal.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -167,16 +496,113 @@ const plantingId = route.params.id
 const loading = computed(() => farmStore.loadingPlanting)
 const error = computed(() => farmStore.error)
 const planting = computed(() => farmStore.currentPlanting)
+const lifecycleStatus = computed(() => farmStore.lifecycleStatus)
+const stageTimeline = computed(() => farmStore.stageTimeline)
+
+// Computed helpers for stage display
+const currentStage = computed(() => {
+  if (!stageTimeline.value) return null
+  return stageTimeline.value.find(s => s.status === 'in_progress')
+})
+
+const daysInStage = computed(() => {
+  if (!currentStage.value || !currentStage.value.started_at) return 0
+  const start = new Date(currentStage.value.started_at)
+  const now = new Date()
+  const diffTime = Math.abs(now - start)
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) 
+})
+
+const canAdvanceStage = computed(() => {
+  return planting.value && 
+         currentStage.value && 
+         planting.value.status !== 'ready' && 
+         planting.value.status !== 'harvested' &&
+         planting.value.status !== 'failed'
+})
+
+// Confirmation State
+const showConfirmModal = ref(false)
+const plantingToDelete = ref(null)
+
+// Advance Stage State
+const showAdvanceModal = ref(false)
+const advanceNotes = ref('')
+const advanceLoading = ref(false)
+
+// --- Failure Modal ---
+const showFailModal  = ref(false)
+const failLoading    = ref(false)
+const failError      = ref('')
+const failForm       = ref({ failure_category: '', failure_reason: '' })
+
+// Open for new failure (empty form)
+const openFailModal = () => {
+  failForm.value  = { failure_category: '', failure_reason: '' }
+  failError.value = ''
+  showFailModal.value = true
+}
+
+// Open for editing existing failure details (pre-filled)
+const openEditFailModal = () => {
+  failForm.value = {
+    failure_category: planting.value?.failure_category || '',
+    failure_reason:   planting.value?.failure_reason   || '',
+  }
+  failError.value = ''
+  showFailModal.value = true
+}
+
+const submitFail = async () => {
+  if (!failForm.value.failure_category) {
+    failError.value = 'Please select a failure category.'
+    return
+  }
+  failLoading.value = true
+  failError.value   = ''
+  try {
+    await farmStore.updatePlanting(planting.value.id, {
+      status: 'failed',
+      failure_category: failForm.value.failure_category,
+      failure_reason: failForm.value.failure_reason || null,
+    })
+    showFailModal.value = false
+    await fetchPlantingData()
+  } catch (err) {
+    failError.value = err?.response?.data?.message || 'Failed to mark as failed. Try again.'
+  } finally {
+    failLoading.value = false
+  }
+}
+
+// --- Un-Fail Modal ---
+const showUnfailModal = ref(false)
+const unfailLoading   = ref(false)
+const unfailError     = ref('')
+
+const submitUnfail = async () => {
+  unfailLoading.value = true
+  unfailError.value   = ''
+  try {
+    await farmStore.updatePlanting(planting.value.id, { status: 'growing' })
+    showUnfailModal.value = false
+    await fetchPlantingData()
+  } catch (err) {
+    unfailError.value = err?.response?.data?.message || 'Failed to revert planting. Try again.'
+  } finally {
+    unfailLoading.value = false
+  }
+}
+
 
 const fetchPlantingData = async () => {
   // Clear any previous errors
   farmStore.error = null 
   try {
-    // Call the action we added to the store
-    await farmStore.fetchPlantingById(plantingId)
+    // Call the lifecycle action instead of just getById
+    await farmStore.fetchPlantingLifecycle(plantingId)
   } catch (err) {
     console.error('Failed to fetch planting:', err)
-    // The store action already sets the error, so we just log it
   }
 }
 
@@ -190,17 +616,43 @@ const goToEdit = (id) => {
 }
 
 // --- CRUD Actions ---
-const confirmDelete = async (planting) => {
-  const cropName = planting.crop_type || 'this planting'
-  if (window.confirm(`Are you sure you want to delete "${cropName}"? This cannot be undone.`)) {
-    try {
-      await farmStore.deletePlanting(planting.id)
-      // After deleting, go back to the index page
-      router.push('/plantings')
-    } catch (err) {
-      console.error('Failed to delete planting:', err)
-      // The store action will set the error, which our computed prop will catch
-    }
+const confirmDelete = (planting) => {
+  plantingToDelete.value = planting
+  showConfirmModal.value = true
+}
+
+const deletePlanting = async () => {
+  if (!plantingToDelete.value) return
+  showConfirmModal.value = false
+  
+  try {
+    await farmStore.deletePlanting(plantingToDelete.value.id)
+    // After deleting, go back to the index page
+    router.push('/plantings')
+  } catch (err) {
+    console.error('Failed to delete planting:', err)
+    // The store action will set the error, which our computed prop will catch
+  }
+}
+
+// --- Stage Actions ---
+const openAdvanceModal = () => {
+  advanceNotes.value = ''
+  showAdvanceModal.value = true
+}
+
+const confirmAdvanceStage = async () => {
+  advanceLoading.value = true
+  try {
+    await farmStore.advanceStage(planting.value.id, {
+      notes: advanceNotes.value
+    })
+    showAdvanceModal.value = false
+    // Notifications are handled by api.js interceptor
+  } catch (err) {
+    console.error('Failed to advance stage:', err)
+  } finally {
+    advanceLoading.value = false
   }
 }
 

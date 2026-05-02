@@ -1,0 +1,246 @@
+<?php
+
+namespace App\Http\Controllers\MarketPlace;
+
+use App\Http\Controllers\Controller;
+use App\Models\CartItem;
+use App\Models\RiceProduct;
+use App\Models\RiceOrder;
+use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+
+class CartController extends Controller
+{
+    /**
+     * Get the current user's cart
+     */
+    public function index(): JsonResponse
+    {
+        $cartItems = CartItem::where('buyer_id', Auth::id())
+            ->with(['riceProduct.farmer', 'riceProduct.riceVariety'])
+            ->get();
+
+        $total = $cartItems->sum(fn($item) => $item->quantity * ($item->riceProduct->price_per_unit ?? 0));
+        $itemCount = $cartItems->sum('quantity');
+
+        return response()->json([
+            'items' => $cartItems,
+            'total' => round($total, 2),
+            'item_count' => $itemCount,
+        ]);
+    }
+
+    /**
+     * Add item to cart
+     */
+    public function addItem(Request $request): JsonResponse
+    {
+        $request->validate([
+            'rice_product_id' => 'required|exists:rice_products,id',
+            'quantity' => 'required|numeric|min:1',
+        ]);
+
+        $product = RiceProduct::findOrFail($request->rice_product_id);
+
+        // Check if product is available (using correct field names)
+        if (!$product->is_available || !in_array($product->production_status, ['available', 'in_production'])) {
+            return response()->json(['message' => 'Product is not available'], 422);
+        }
+
+        // Check quantity against stock
+        if ($request->quantity > $product->quantity_available) {
+            return response()->json(['message' => 'Requested quantity exceeds available stock'], 422);
+        }
+
+        // Check if item already in cart
+        $cartItem = CartItem::where('buyer_id', Auth::id())
+            ->where('rice_product_id', $request->rice_product_id)
+            ->first();
+
+        if ($cartItem) {
+            $newQty = $cartItem->quantity + $request->quantity;
+            if ($newQty > $product->quantity_available) {
+                return response()->json(['message' => 'Total quantity would exceed available stock'], 422);
+            }
+            $cartItem->update(['quantity' => $newQty]);
+        } else {
+            $cartItem = CartItem::create([
+                'buyer_id' => Auth::id(),
+                'rice_product_id' => $request->rice_product_id,
+                'quantity' => $request->quantity,
+            ]);
+        }
+
+        $cartItem->load('riceProduct');
+
+        return response()->json([
+            'message' => 'Item added to cart',
+            'item' => $cartItem,
+            'cart_count' => CartItem::where('buyer_id', Auth::id())->sum('quantity'),
+        ]);
+    }
+
+    /**
+     * Update cart item quantity
+     */
+    public function updateItem(Request $request, CartItem $cartItem): JsonResponse
+    {
+        if ($cartItem->buyer_id !== Auth::id()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $request->validate([
+            'quantity' => 'required|numeric|min:1',
+        ]);
+
+        $product = $cartItem->riceProduct;
+        if ($request->quantity > $product->quantity_available) {
+            return response()->json(['message' => 'Quantity exceeds available stock'], 422);
+        }
+
+        $cartItem->update(['quantity' => $request->quantity]);
+
+        return response()->json([
+            'message' => 'Cart updated',
+            'item' => $cartItem->fresh(),
+        ]);
+    }
+
+    /**
+     * Remove item from cart
+     */
+    public function removeItem(CartItem $cartItem): JsonResponse
+    {
+        if ($cartItem->buyer_id !== Auth::id()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $cartItem->delete();
+
+        return response()->json([
+            'message' => 'Item removed from cart',
+            'cart_count' => CartItem::where('buyer_id', Auth::id())->sum('quantity'),
+        ]);
+    }
+
+    /**
+     * Clear entire cart
+     */
+    public function clear(): JsonResponse
+    {
+        CartItem::where('buyer_id', Auth::id())->delete();
+
+        return response()->json(['message' => 'Cart cleared']);
+    }
+
+    /**
+     * Checkout - create orders from cart items
+     */
+    public function checkout(Request $request): JsonResponse
+    {
+        $request->validate([
+            'delivery_address' => 'required|array',
+            'delivery_method' => 'required|string',
+            'payment_method' => 'required|string',
+            'notes' => 'nullable|string',
+            'offer_price' => 'nullable|numeric|min:0.01',
+        ]);
+
+        $cartItems = CartItem::where('buyer_id', Auth::id())
+            ->with('riceProduct')
+            ->get();
+
+        if ($cartItems->isEmpty()) {
+            return response()->json(['message' => 'Cart is empty'], 422);
+        }
+
+        $orders = [];
+        $offerPrice = $request->input('offer_price');
+        $checkoutGroupId = Str::uuid()->toString();
+
+        DB::transaction(function () use ($cartItems, $request, &$orders, $offerPrice, $checkoutGroupId) {
+            foreach ($cartItems as $item) {
+                $product = $item->riceProduct;
+
+                // Reserve stock (throws exception if insufficient)
+                // Since we are inside a transaction, this is safe.
+                if (!$product->hasSufficientQuantity($item->quantity)) {
+                    throw new \Exception("Insufficient stock for {$product->name}");
+                }
+                $product->reserveQuantity($item->quantity);
+
+                // Determine if negotiation is active
+                $unitPrice = $product->price_per_unit;
+                $isNegotiating = $offerPrice && (float) $offerPrice < (float) $unitPrice;
+                $orderStatus = $isNegotiating ? RiceOrder::STATUS_NEGOTIATING : RiceOrder::STATUS_PENDING;
+                $totalAmount = $isNegotiating
+                    ? $item->quantity * $offerPrice
+                    : $item->quantity * $unitPrice;
+
+                // Create order
+                $order = RiceOrder::create([
+                    'buyer_id' => Auth::id(),
+                    'rice_product_id' => $product->id,
+                    'quantity' => $item->quantity,
+                    'unit_price' => $unitPrice,
+                    'offer_price' => $offerPrice,
+                    'total_amount' => $totalAmount,
+                    'status' => $orderStatus,
+                    'payment_status' => RiceOrder::PAYMENT_PENDING,
+                    'delivery_address' => $request->delivery_address,
+                    'delivery_method' => $request->delivery_method,
+                    'payment_method' => $request->payment_method,
+                    'buyer_notes' => $request->notes,
+                    'order_date' => now(),
+                    'checkout_group_id' => $checkoutGroupId,
+                ]);
+
+                // Deduct from Inventory Item
+                if (!$product->deductFromInventory($item->quantity, $order->id)) {
+                    \Log::warning('Cart checkout: inventory deduction failed', [
+                        'product_id' => $product->id,
+                        'order_id' => $order->id,
+                        'quantity' => $item->quantity,
+                    ]);
+                }
+
+                // Notify farmer
+                $notificationMessage = $isNegotiating
+                    ? "You have a new price negotiation for {$item->quantity} {$product->unit} of {$product->name}. Offered: ₱{$offerPrice}/{$product->unit}"
+                    : "You have a new order for {$item->quantity} {$product->unit} of {$product->name}";
+
+                \App\Models\Notification::notify(
+                    $product->farmer_id,
+                    \App\Models\Notification::TYPE_ORDER_PLACED,
+                    $isNegotiating ? 'New Price Negotiation' : 'New Order Received',
+                    $notificationMessage,
+                    ['order_id' => $order->id],
+                    "/farmer/orders/{$order->id}"
+                );
+
+                $orders[] = $order;
+            }
+
+            // Clear cart
+            CartItem::where('buyer_id', Auth::id())->delete();
+        });
+
+        return response()->json([
+            'message' => 'Checkout successful! ' . count($orders) . ' order(s) placed.',
+            'orders' => $orders,
+        ]);
+    }
+
+    /**
+     * Get cart item count (for badge)
+     */
+    public function count(): JsonResponse
+    {
+        $count = CartItem::where('buyer_id', Auth::id())->sum('quantity');
+
+        return response()->json(['count' => $count]);
+    }
+}

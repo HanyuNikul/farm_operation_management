@@ -14,6 +14,7 @@ class RiceOrder extends Model
         'rice_product_id',
         'quantity',
         'unit_price',
+        'offer_price',
         'total_amount',
         'status',
         'is_pre_order',
@@ -22,6 +23,8 @@ class RiceOrder extends Model
         'notification_sent_day_before',
         'delivery_address',
         'delivery_method',
+        'preferred_pickup_date',
+        'confirmed_pickup_date',
         'payment_method',
         'payment_status',
         'notes',
@@ -31,34 +34,49 @@ class RiceOrder extends Model
         'tracking_number',
         'farmer_notes',
         'buyer_notes',
+        'shipped_at',
+        'auto_confirm_at',
+        'pickup_deadline',
+        'dispute_reason',
+        'checkout_group_id',
     ];
 
     protected $casts = [
         'quantity' => 'decimal:2',
         'unit_price' => 'decimal:2',
+        'offer_price' => 'decimal:2',
         'total_amount' => 'decimal:2',
         'delivery_address' => 'array',
         'order_date' => 'datetime',
         'expected_delivery_date' => 'date',
         'actual_delivery_date' => 'date',
         'available_date' => 'date',
+        'preferred_pickup_date' => 'date',
+        'confirmed_pickup_date' => 'date',
         'is_pre_order' => 'boolean',
         'notification_sent_available' => 'boolean',
         'notification_sent_day_before' => 'boolean',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'shipped_at' => 'datetime',
+        'auto_confirm_at' => 'datetime',
+        'pickup_deadline' => 'datetime',
     ];
 
     /**
      * Order status constants
      */
     const STATUS_PENDING = 'pending';
+    const STATUS_NEGOTIATING = 'negotiating';
     const STATUS_CONFIRMED = 'confirmed';
+    const STATUS_READY_FOR_PICKUP = 'ready_for_pickup';
+    const STATUS_PICKED_UP = 'picked_up';  // Equivalent to delivered for pickup orders
+    const STATUS_CANCELLED = 'cancelled';
+    const STATUS_REFUNDED = 'refunded';
+    const STATUS_DISPUTED = 'disputed';
     const STATUS_PROCESSING = 'processing';
     const STATUS_SHIPPED = 'shipped';
     const STATUS_DELIVERED = 'delivered';
-    const STATUS_CANCELLED = 'cancelled';
-    const STATUS_REFUNDED = 'refunded';
 
     /**
      * Payment status constants
@@ -80,7 +98,7 @@ class RiceOrder extends Model
     /**
      * Get the buyer for this order
      */
-    public function buyer()
+    public function buyer(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(User::class, 'buyer_id');
     }
@@ -88,7 +106,7 @@ class RiceOrder extends Model
     /**
      * Get the rice product for this order
      */
-    public function riceProduct()
+    public function riceProduct(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(RiceProduct::class);
     }
@@ -96,7 +114,7 @@ class RiceOrder extends Model
     /**
      * Get the farmer through the product
      */
-    public function farmer()
+    public function farmer(): \Illuminate\Database\Eloquent\Relations\HasOneThrough
     {
         return $this->hasOneThrough(User::class, RiceProduct::class, 'id', 'id', 'rice_product_id', 'farmer_id');
     }
@@ -104,9 +122,28 @@ class RiceOrder extends Model
     /**
      * Get messages associated with the order
      */
-    public function messages()
+    public function messages(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(RiceOrderMessage::class, 'rice_order_id')->latest();
+    }
+
+    /**
+     * Get price negotiations associated with the order
+     */
+    public function negotiations(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(PriceNegotiation::class, 'rice_order_id');
+    }
+
+    /**
+     * Get the active (pending) negotiation if any
+     */
+    public function getActiveNegotiation(): ?PriceNegotiation
+    {
+        return $this->negotiations()
+            ->where('status', PriceNegotiation::STATUS_PENDING)
+            ->latest()
+            ->first();
     }
 
     /**
@@ -138,7 +175,7 @@ class RiceOrder extends Model
      */
     public function scopeActive($query)
     {
-        return $query->whereNotIn('status', [self::STATUS_CANCELLED, self::STATUS_DELIVERED, self::STATUS_REFUNDED]);
+        return $query->whereNotIn('status', [self::STATUS_CANCELLED, self::STATUS_PICKED_UP, self::STATUS_REFUNDED]);
     }
 
     /**
@@ -170,8 +207,8 @@ class RiceOrder extends Model
             'farmer_notes' => $farmerNotes,
         ]);
 
-        // Reserve the quantity in the product
-        $this->riceProduct->reserveQuantity($this->quantity);
+        // Note: Quantity is now reserved immediately upon order creation/store.
+        // So we don't need to reserve it here again.
     }
 
     /**
@@ -179,8 +216,9 @@ class RiceOrder extends Model
      */
     public function cancel($reason = null)
     {
-        // Release reserved quantity if order was confirmed
-        if (in_array($this->status, [self::STATUS_CONFIRMED, self::STATUS_PROCESSING])) {
+        // Release reserved quantity if order was pending, confirmed or ready_for_pickup
+        // Now including PENDING because we reserve on creation.
+        if (in_array($this->status, [self::STATUS_PENDING, self::STATUS_CONFIRMED, self::STATUS_READY_FOR_PICKUP])) {
             $this->riceProduct->releaseQuantity($this->quantity);
         }
 
@@ -191,24 +229,49 @@ class RiceOrder extends Model
     }
 
     /**
-     * Mark as shipped
+     * Mark as ready for pickup
+     * Sets a 3-day pickup deadline based on industry standards for fresh produce e-commerce
+     * (Target, Walmart use 1-day for perishables; 3 days for non-highly-perishable rice)
      */
-    public function ship($trackingNumber = null)
+    public function markReadyForPickup()
     {
         $this->update([
-            'status' => self::STATUS_SHIPPED,
-            'tracking_number' => $trackingNumber,
+            'status' => self::STATUS_READY_FOR_PICKUP,
+            'auto_confirm_at' => now()->addDays(30),
+            'pickup_deadline' => now()->addDays(3),
         ]);
     }
 
     /**
-     * Mark as delivered
+     * Check if pickup deadline has expired
      */
-    public function deliver($actualDeliveryDate = null)
+    public function isPickupExpired(): bool
+    {
+        if ($this->status !== self::STATUS_READY_FOR_PICKUP) {
+            return false;
+        }
+        return $this->pickup_deadline && now()->gt($this->pickup_deadline);
+    }
+
+    /**
+     * Check if order can be marked as paid
+     * Payment can be marked at any stage of the order lifecycle
+     */
+    public function canBeMarkedAsPaid(): bool
+    {
+        return !in_array($this->status, [self::STATUS_CANCELLED, self::STATUS_REFUNDED])
+            && $this->payment_status !== self::PAYMENT_PAID;
+    }
+
+    /**
+     * Mark as picked up (delivered)
+     */
+    public function markPickedUp($actualPickupDate = null)
     {
         $this->update([
-            'status' => self::STATUS_DELIVERED,
-            'actual_delivery_date' => $actualDeliveryDate ?? now(),
+            'status' => self::STATUS_PICKED_UP,
+            'actual_delivery_date' => $actualPickupDate ?? now(),
+            'auto_confirm_at' => null,
         ]);
     }
 
@@ -229,19 +292,19 @@ class RiceOrder extends Model
     }
 
     /**
-     * Check if order can be shipped
+     * Check if order can be marked ready for pickup
      */
-    public function canBeShipped()
+    public function canBeMarkedReady()
     {
         return $this->status === self::STATUS_CONFIRMED;
     }
 
     /**
-     * Check if order can be delivered
+     * Check if order can be marked as picked up
      */
-    public function canBeDelivered()
+    public function canBePickedUp()
     {
-        return $this->status === self::STATUS_SHIPPED;
+        return $this->status === self::STATUS_READY_FOR_PICKUP;
     }
 
     /**
@@ -251,14 +314,12 @@ class RiceOrder extends Model
     {
         switch ($this->status) {
             case self::STATUS_PENDING:
-                return 10;
+                return 25;
             case self::STATUS_CONFIRMED:
-                return 30;
-            case self::STATUS_PROCESSING:
                 return 50;
-            case self::STATUS_SHIPPED:
-                return 80;
-            case self::STATUS_DELIVERED:
+            case self::STATUS_READY_FOR_PICKUP:
+                return 75;
+            case self::STATUS_PICKED_UP:
                 return 100;
             case self::STATUS_CANCELLED:
             case self::STATUS_REFUNDED:
@@ -278,7 +339,7 @@ class RiceOrder extends Model
         }
 
         // Calculate based on delivery method
-        $daysToAdd = match($this->delivery_method) {
+        $daysToAdd = match ($this->delivery_method) {
             self::DELIVERY_PICKUP => 1,
             self::DELIVERY_COURIER => 3,
             self::DELIVERY_POSTAL => 7,
@@ -294,7 +355,7 @@ class RiceOrder extends Model
      */
     public function isOverdue()
     {
-        if ($this->status === self::STATUS_DELIVERED) {
+        if ($this->status === self::STATUS_PICKED_UP) {
             return false;
         }
 
@@ -307,11 +368,32 @@ class RiceOrder extends Model
      */
     public function getDaysUntilDelivery()
     {
-        if ($this->status === self::STATUS_DELIVERED) {
+        if ($this->status === self::STATUS_PICKED_UP) {
             return 0;
         }
 
         $expectedDate = $this->expected_delivery_date ?? $this->getEstimatedDeliveryDate();
         return now()->diffInDays($expectedDate, false);
+    }
+    /**
+     * Scope to get orders in the same checkout group
+     */
+    public function scopeInGroup($query, $groupId)
+    {
+        return $query->where('checkout_group_id', $groupId);
+    }
+
+    /**
+     * Get sibling orders (same checkout group, excluding self)
+     */
+    public function getSiblingOrders()
+    {
+        if (!$this->checkout_group_id) {
+            return collect();
+        }
+
+        return RiceOrder::where('checkout_group_id', $this->checkout_group_id)
+            ->where('id', '!=', $this->id)
+            ->get();
     }
 }

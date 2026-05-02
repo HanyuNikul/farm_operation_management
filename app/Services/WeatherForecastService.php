@@ -12,8 +12,8 @@ use Carbon\Carbon;
 
 class WeatherForecastService
 {
-    private string $apiKey;
-    private string $baseUrl;
+    private ?string $apiKey;
+    private ?string $baseUrl;
     protected $weatherService;
 
     public function __construct(WeatherService $weatherService)
@@ -24,45 +24,46 @@ class WeatherForecastService
     }
 
     /**
-     * Get field weather forecast
+     * Get farm weather forecast
      */
-    public function getFieldForecast(Field $field, int $days = 7, string $forecastType = 'basic')
+    public function getForecast(Farm $farm, int $days = 7, string $forecastType = 'basic')
     {
-        if (!isset($field->location['lat']) || !isset($field->location['lon'])) {
-            return ['error' => 'Field location coordinates not available'];
+        $coords = $farm->weather_coordinates;
+        if (!$coords || !$coords['lat'] || !$coords['lon']) {
+            return ['error' => 'Farm location coordinates not available'];
         }
 
-        $cacheKey = "weather_forecast_{$field->id}_{$days}_{$forecastType}";
-        
-        return Cache::remember($cacheKey, 1800, function () use ($field, $days, $forecastType) {
-            $forecast = $this->fetchWeatherForecast($field->location['lat'], $field->location['lon'], $days);
-            
+        $cacheKey = "weather_forecast_farm_{$farm->id}_{$days}_{$forecastType}";
+
+        return Cache::remember($cacheKey, 1800, function () use ($farm, $days, $forecastType, $coords) {
+            $forecast = $this->fetchWeatherForecast((float) $coords['lat'], (float) $coords['lon'], $days);
+
             if (!$forecast) {
                 return ['error' => 'Unable to fetch weather forecast'];
             }
 
-            return $this->processForecast($forecast, $forecastType, $field);
+            return $this->processForecast($forecast, $forecastType, $farm);
         });
     }
 
     /**
      * Get extended weather forecast
      */
-    public function getExtendedForecast(Field $field, string $period = 'weekly')
+    public function getExtendedForecast(Farm $farm, string $period = 'weekly')
     {
-        $days = match($period) {
+        $days = match ($period) {
             'weekly' => 7,
             'monthly' => 30,
             'seasonal' => 90,
             default => 7,
         };
 
-        $forecast = $this->getFieldForecast($field, min($days, 14)); // API limit
-        
+        $forecast = $this->getForecast($farm, min($days, 14)); // API limit
+
         if ($period === 'seasonal') {
             // For seasonal forecasts, we'd typically use climate models
-            $forecast['seasonal_trends'] = $this->getSeasonalTrends($field);
-            $forecast['climate_outlook'] = $this->getClimateOutlook($field);
+            $forecast['seasonal_trends'] = $this->getSeasonalTrends($farm);
+            $forecast['climate_outlook'] = $this->getClimateOutlook($farm);
         }
 
         return [
@@ -75,17 +76,22 @@ class WeatherForecastService
     /**
      * Get agricultural weather forecast
      */
-    public function getAgriculturalForecast(Field $field)
+    public function getAgriculturalForecast(Farm $farm)
     {
-        $basicForecast = $this->getFieldForecast($field, 7, 'detailed');
-        $currentPlanting = $field->getCurrentRicePlanting();
-        
+        $basicForecast = $this->getForecast($farm, 7, 'detailed');
+        $currentPlanting = null;
+        foreach ($farm->fields as $field) {
+            $currentPlanting = $field->getCurrentRicePlanting();
+            if ($currentPlanting)
+                break;
+        }
+
         $agriculturalForecast = [
             'basic_forecast' => $basicForecast,
             'agricultural_insights' => $this->generateAgriculturalInsights($basicForecast, $field),
             'crop_specific_recommendations' => $this->getCropSpecificRecommendations($basicForecast, $currentPlanting),
-            'irrigation_forecast' => $this->getIrrigationForecast($basicForecast, $field),
-            'pest_disease_forecast' => $this->getPestDiseaseForecast($basicForecast, $field),
+            'irrigation_forecast' => $this->getIrrigationForecast($basicForecast, $farm),
+            'pest_disease_forecast' => $this->getPestDiseaseForecast($basicForecast, $farm),
             'work_window_forecast' => $this->getWorkWindowForecast($basicForecast),
         ];
 
@@ -95,14 +101,14 @@ class WeatherForecastService
     /**
      * Get weather alerts from forecast
      */
-    public function getWeatherAlerts(Field $field)
+    public function getWeatherAlerts(Farm $farm)
     {
-        $forecast = $this->getFieldForecast($field, 5);
+        $forecast = $this->getForecast($farm, 5);
         $alerts = [];
 
         if (isset($forecast['daily_forecasts'])) {
             foreach ($forecast['daily_forecasts'] as $day) {
-                $dayAlerts = $this->analyzeDayForAlerts($day, $field);
+                $dayAlerts = $this->analyzeDayForAlerts($day, $farm);
                 $alerts = array_merge($alerts, $dayAlerts);
             }
         }
@@ -119,36 +125,34 @@ class WeatherForecastService
      */
     public function getFarmForecast(Farm $farm, int $days = 7)
     {
-        $fields = $farm->fields;
-        $fieldForecasts = [];
-        
-        foreach ($fields as $field) {
-            if (isset($field->location['lat']) && isset($field->location['lon'])) {
-                $fieldForecasts[$field->id] = $this->getFieldForecast($field, $days);
-            }
-        }
+        // This is now redundant with getForecast, but keeping structure for compatibility
+        $forecast = $this->getForecast($farm, $days);
 
         return [
             'farm' => $farm,
-            'field_forecasts' => $fieldForecasts,
-            'farm_summary' => $this->generateFarmForecastSummary($fieldForecasts),
-            'unified_recommendations' => $this->generateUnifiedRecommendations($fieldForecasts),
+            'forecast' => $forecast,
+            'farm_summary' => $forecast['summary'] ?? [],
         ];
     }
 
     /**
      * Get activity recommendations based on weather forecast
      */
-    public function getActivityRecommendations(Field $field)
+    public function getActivityRecommendations(Farm $farm)
     {
-        $forecast = $this->getFieldForecast($field, 7);
-        $currentPlanting = $field->getCurrentRicePlanting();
-        
+        $forecast = $this->getForecast($farm, 7);
+        $currentPlanting = null;
+        foreach ($farm->fields as $field) {
+            $currentPlanting = $field->getCurrentRicePlanting();
+            if ($currentPlanting)
+                break;
+        }
+
         $recommendations = [];
 
         if (isset($forecast['daily_forecasts'])) {
             foreach ($forecast['daily_forecasts'] as $day) {
-                $dayRecommendations = $this->generateDayActivityRecommendations($day, $field, $currentPlanting);
+                $dayRecommendations = $this->generateDayActivityRecommendations($day, $farm, $currentPlanting);
                 $recommendations[] = [
                     'date' => $day['date'],
                     'recommendations' => $dayRecommendations,
@@ -166,15 +170,15 @@ class WeatherForecastService
     /**
      * Get optimal timing for specific activities
      */
-    public function getOptimalTiming(Field $field, string $activityType, int $planningDays = 14)
+    public function getOptimalTiming(Farm $farm, string $activityType, int $planningDays = 14)
     {
-        $forecast = $this->getFieldForecast($field, $planningDays);
+        $forecast = $this->getForecast($farm, $planningDays);
         $optimalWindows = [];
 
         if (isset($forecast['daily_forecasts'])) {
             foreach ($forecast['daily_forecasts'] as $day) {
-                $suitability = $this->evaluateActivitySuitability($day, $activityType, $field);
-                
+                $suitability = $this->evaluateActivitySuitability($day, $activityType, $farm);
+
                 if ($suitability['suitable']) {
                     $optimalWindows[] = [
                         'date' => $day['date'],
@@ -202,14 +206,19 @@ class WeatherForecastService
     /**
      * Get crop protection forecast
      */
-    public function getCropProtectionForecast(Field $field)
+    public function getCropProtectionForecast(Farm $farm)
     {
-        $forecast = $this->getFieldForecast($field, 7);
-        $currentPlanting = $field->getCurrentRicePlanting();
-        
+        $forecast = $this->getForecast($farm, 7);
+        $currentPlanting = null;
+        foreach ($farm->fields as $field) {
+            $currentPlanting = $field->getCurrentRicePlanting();
+            if ($currentPlanting)
+                break;
+        }
+
         return [
-            'disease_risk_forecast' => $this->forecastDiseaseRisk($forecast, $field),
-            'pest_risk_forecast' => $this->forecastPestRisk($forecast, $field),
+            'disease_risk_forecast' => $this->forecastDiseaseRisk($forecast, $farm),
+            'pest_risk_forecast' => $this->forecastPestRisk($forecast, $farm),
             'spray_window_forecast' => $this->forecastSprayWindows($forecast),
             'protection_recommendations' => $this->generateProtectionRecommendations($forecast, $currentPlanting),
         ];
@@ -218,11 +227,11 @@ class WeatherForecastService
     /**
      * Get seasonal weather outlook
      */
-    public function getSeasonalOutlook(Farm $farm, string $season = null, int $monthsAhead = 3)
+    public function getSeasonalOutlook(Farm $farm, ?string $season = null, int $monthsAhead = 3)
     {
         // This would typically integrate with seasonal climate models
         // For now, providing a structured placeholder
-        
+
         return [
             'season' => $season,
             'outlook_period' => $monthsAhead,
@@ -236,13 +245,13 @@ class WeatherForecastService
     /**
      * Subscribe to weather alerts
      */
-    public function subscribeToAlerts(Field $field, array $alertTypes, array $notificationMethods, array $thresholds = [])
+    public function subscribeToAlerts(Farm $farm, array $alertTypes, array $notificationMethods, array $thresholds = [])
     {
         // This would integrate with a notification system
         // For now, returning a structured response
-        
+
         return [
-            'field_id' => $field->id,
+            'farm_id' => $farm->id,
             'alert_types' => $alertTypes,
             'notification_methods' => $notificationMethods,
             'thresholds' => $thresholds,
@@ -254,16 +263,16 @@ class WeatherForecastService
     /**
      * Get forecast accuracy metrics
      */
-    public function getForecastAccuracy(Field $field, int $periodDays = 30)
+    public function getForecastAccuracy(Farm $farm, int $periodDays = 30)
     {
         $startDate = now()->subDays($periodDays);
-        $actualWeather = WeatherLog::where('field_id', $field->id)
+        $actualWeather = WeatherLog::where('farm_id', $farm->id)
             ->where('recorded_at', '>=', $startDate)
             ->get();
 
         // This would compare historical forecasts with actual weather
         // For now, providing placeholder metrics
-        
+
         return [
             'period_days' => $periodDays,
             'temperature_accuracy' => 85.2,
@@ -304,10 +313,10 @@ class WeatherForecastService
         }
     }
 
-    private function processForecast(array $forecastData, string $forecastType, Field $field)
+    private function processForecast(array $forecastData, string $forecastType, Farm $farm)
     {
         $dailyForecasts = $this->groupForecastsByDay($forecastData['list'] ?? []);
-        
+
         $processed = [
             'daily_forecasts' => $dailyForecasts,
             'summary' => $this->generateForecastSummary($dailyForecasts),
@@ -315,7 +324,7 @@ class WeatherForecastService
 
         if ($forecastType === 'detailed' || $forecastType === 'agricultural') {
             $processed['hourly_details'] = $this->processHourlyDetails($forecastData['list'] ?? []);
-            $processed['agricultural_insights'] = $this->generateAgriculturalInsights($processed, $field);
+            $processed['agricultural_insights'] = $this->generateAgriculturalInsights($processed, $farm);
         }
 
         return $processed;
@@ -324,10 +333,10 @@ class WeatherForecastService
     private function groupForecastsByDay(array $forecastList)
     {
         $dailyForecasts = [];
-        
+
         foreach ($forecastList as $forecast) {
             $date = Carbon::parse($forecast['dt_txt'])->format('Y-m-d');
-            
+
             if (!isset($dailyForecasts[$date])) {
                 $dailyForecasts[$date] = [
                     'date' => $date,
@@ -338,7 +347,7 @@ class WeatherForecastService
                     'hourly_data' => [],
                 ];
             }
-            
+
             $temp = $forecast['main']['temp'];
             $dailyForecasts[$date]['temperature']['min'] = min($dailyForecasts[$date]['temperature']['min'], $temp);
             $dailyForecasts[$date]['temperature']['max'] = max($dailyForecasts[$date]['temperature']['max'], $temp);
@@ -374,7 +383,7 @@ class WeatherForecastService
 
         $temperatures = array_column($dailyForecasts, 'temperature');
         $avgTemps = array_column($temperatures, 'avg');
-        
+
         return [
             'avg_temperature' => round(array_sum($avgTemps) / count($avgTemps), 1),
             'temperature_range' => [
@@ -392,7 +401,7 @@ class WeatherForecastService
         foreach ($dailyForecasts as $day) {
             $allConditions[] = $day['most_common_condition'];
         }
-        
+
         $counts = array_count_values($allConditions);
         arsort($counts);
         return array_key_first($counts);
@@ -412,37 +421,37 @@ class WeatherForecastService
         }, $forecastList);
     }
 
-    private function generateAgriculturalInsights(array $forecast, Field $field)
+    private function generateAgriculturalInsights(array $forecast, Farm $farm)
     {
         $insights = [];
-        
+
         if (isset($forecast['daily_forecasts'])) {
             foreach ($forecast['daily_forecasts'] as $day) {
                 $dayInsights = [];
-                
+
                 // Temperature insights
                 if ($day['temperature']['max'] > 35) {
                     $dayInsights[] = 'High temperature may cause heat stress in rice plants';
                 }
-                
+
                 if ($day['temperature']['min'] < 15) {
                     $dayInsights[] = 'Low temperature may slow rice growth';
                 }
-                
+
                 // Humidity insights
                 if ($day['humidity_avg'] > 85) {
                     $dayInsights[] = 'High humidity increases disease risk';
                 }
-                
+
                 // Wind insights
                 if ($day['wind_speed_avg'] > 15) {
                     $dayInsights[] = 'Strong winds may cause lodging in mature rice plants';
                 }
-                
+
                 $insights[$day['date']] = $dayInsights;
             }
         }
-        
+
         return $insights;
     }
 
@@ -454,12 +463,12 @@ class WeatherForecastService
         return ['recommendations' => 'Crop-specific recommendations based on forecast'];
     }
 
-    private function getIrrigationForecast($forecast, $field)
+    private function getIrrigationForecast($forecast, $farm)
     {
         return ['irrigation_needs' => 'Irrigation forecast based on weather'];
     }
 
-    private function getPestDiseaseForecast($forecast, $field)
+    private function getPestDiseaseForecast($forecast, $farm)
     {
         return ['pest_disease_risk' => 'Pest and disease forecast'];
     }
@@ -469,10 +478,10 @@ class WeatherForecastService
         return ['work_windows' => 'Optimal work windows based on weather'];
     }
 
-    private function analyzeDayForAlerts($day, $field)
+    private function analyzeDayForAlerts($day, $farm)
     {
         $alerts = [];
-        
+
         if ($day['temperature']['max'] > 35) {
             $alerts[] = [
                 'type' => 'temperature',
@@ -481,7 +490,7 @@ class WeatherForecastService
                 'date' => $day['date'],
             ];
         }
-        
+
         return $alerts;
     }
 
@@ -508,7 +517,7 @@ class WeatherForecastService
         return ['recommendations' => 'Unified farm recommendations'];
     }
 
-    private function generateDayActivityRecommendations($day, $field, $planting)
+    private function generateDayActivityRecommendations($day, $farm, $planting)
     {
         return ['recommendations' => 'Daily activity recommendations'];
     }
@@ -523,20 +532,20 @@ class WeatherForecastService
         return ['priority_activities' => 'Priority activities for the week'];
     }
 
-    private function evaluateActivitySuitability($day, $activityType, $field)
+    private function evaluateActivitySuitability($day, $activityType, $farm)
     {
         // Simplified suitability evaluation
         $score = 50; // Base score
-        
+
         // Adjust based on conditions
         if ($day['most_common_condition'] === 'Clear') {
             $score += 20;
         }
-        
+
         if ($day['wind_speed_avg'] < 10) {
             $score += 15;
         }
-        
+
         return [
             'suitable' => $score >= 60,
             'score' => $score,
@@ -550,12 +559,12 @@ class WeatherForecastService
         return ['guidelines' => "Guidelines for {$activityType} activity"];
     }
 
-    private function forecastDiseaseRisk($forecast, $field)
+    private function forecastDiseaseRisk($forecast, $farm)
     {
         return ['disease_risk' => 'Disease risk forecast'];
     }
 
-    private function forecastPestRisk($forecast, $field)
+    private function forecastPestRisk($forecast, $farm)
     {
         return ['pest_risk' => 'Pest risk forecast'];
     }
@@ -570,12 +579,12 @@ class WeatherForecastService
         return ['protection' => 'Crop protection recommendations'];
     }
 
-    private function getSeasonalTrends($field)
+    private function getSeasonalTrends($farm)
     {
         return ['trends' => 'Seasonal weather trends'];
     }
 
-    private function getClimateOutlook($field)
+    private function getClimateOutlook($farm)
     {
         return ['outlook' => 'Climate outlook'];
     }

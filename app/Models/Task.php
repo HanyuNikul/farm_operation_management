@@ -5,33 +5,63 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Carbon\Carbon;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
 class Task extends Model
 {
+    use HasFactory;
 
     protected $fillable = [
         'planting_id',
+        'field_id',
         'task_type',
         'due_date',
         'description',
         'status',
         'assigned_to',
+        'laborer_group_id',
+        'payment_type',
+        'revenue_share_percentage',
+        'wage_amount',
+        'unit',
+        'quantity',
+        'unit_price',
     ];
 
     protected $casts = [
         'due_date' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'revenue_share_percentage' => 'decimal:2',
+        'wage_amount' => 'decimal:2',
+        'quantity' => 'decimal:2',
+        'unit_price' => 'decimal:2',
     ];
 
     /**
      * Task type constants
      */
+    const TYPE_LAND_PREPARATION = 'land_preparation';
+    const TYPE_SEEDLING_MANAGEMENT = 'seedling';
+    const TYPE_TRANSPLANTING = 'transplanting';
     const TYPE_WATERING = 'watering';
+    const TYPE_WATER_MANAGEMENT = 'water_management';
     const TYPE_FERTILIZING = 'fertilizing';
     const TYPE_WEEDING = 'weeding';
     const TYPE_PEST_CONTROL = 'pest_control';
+    const TYPE_PESTICIDE_APPLICATION = 'pesticide_application';
     const TYPE_HARVESTING = 'harvesting';
     const TYPE_MAINTENANCE = 'maintenance';
+    const TYPE_THRESHING = 'threshing';
+    const TYPE_DRYING = 'drying';
+    const TYPE_MILLING = 'milling';
+
+    /**
+     * Payment type constants
+     */
+    const PAYMENT_TYPE_WAGE = 'wage';
+    const PAYMENT_TYPE_SHARE = 'share';
+    const PAYMENT_TYPE_PIECE_RATE = 'piece_rate';
 
     /**
      * Status constants
@@ -44,23 +74,39 @@ class Task extends Model
     /**
      * Get the planting that owns the task
      */
-    public function planting()
+    public function planting(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(Planting::class);
     }
 
     /**
+     * Get the field that owns the task
+     */
+    public function field(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Field::class);
+    }
+
+    /**
      * Get the laborer assigned to this task
      */
-    public function laborer()
+    public function laborer(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(Laborer::class, 'assigned_to');
     }
 
     /**
+     * Get the laborer group assigned to this task
+     */
+    public function laborerGroup(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(LaborerGroup::class, 'laborer_group_id');
+    }
+
+    /**
      * Get the labor wages for this task
      */
-    public function laborWages()
+    public function laborWages(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(LaborWage::class);
     }
@@ -70,8 +116,8 @@ class Task extends Model
      */
     public function isOverdue(): bool
     {
-        return $this->due_date < Carbon::now() && 
-               $this->status !== self::STATUS_COMPLETED;
+        return $this->due_date < Carbon::now() &&
+            $this->status !== self::STATUS_COMPLETED;
     }
 
     /**

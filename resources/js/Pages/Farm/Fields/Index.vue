@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-gray-50">
     <header class="bg-white shadow-sm border-b border-gray-200">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="w-full mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between py-6 gap-4">
           <div>
             <h1 class="text-2xl font-semibold text-gray-900">Fields</h1>
@@ -41,7 +41,7 @@
       </div>
     </header>
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <main class="w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div v-if="error" class="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
         <div class="flex">
           <div class="flex-shrink-0">
@@ -168,6 +168,17 @@
       :field="selectedField"
       @close="closeModal"
     />
+    
+    <!-- Confirmation Modal -->
+    <ConfirmationModal
+      :show="showConfirmModal"
+      title="Delete Field"
+      :message="`Are you sure you want to delete ${fieldToDelete?.name || 'this field'}? This action cannot be undone.`"
+      confirm-text="Delete"
+      type="danger"
+      @close="showConfirmModal = false"
+      @confirm="deleteField"
+    />
   </div>
 </template>
 
@@ -176,6 +187,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useFarmStore } from '@/stores/farm'
 import FieldFormModal from '@/Components/Modals/FieldFormModal.vue'
+import ConfirmationModal from '@/Components/UI/ConfirmationModal.vue'
 
 const router = useRouter()
 const farmStore = useFarmStore()
@@ -184,6 +196,10 @@ const loading = ref(true)
 const error = ref('')
 const isModalOpen = ref(false)
 const selectedField = ref(null)
+
+// Confirmation State
+const showConfirmModal = ref(false)
+const fieldToDelete = ref(null)
 
 const fields = computed(() => farmStore.fields || [])
 
@@ -219,15 +235,21 @@ const refreshFields = async () => {
 }
 
 // --- CRUD Actions ---
-const confirmDelete = async (field) => {
-  if (window.confirm(`Are you sure you want to delete "${field.name || 'this field'}"? This cannot be undone.`)) {
-    try {
-      await farmStore.deleteField(field.id)
-      // No need to call refreshFields() if store optimistically updates
-    } catch (err) {
-      console.error('Failed to delete field:', err)
-      error.value = err.userMessage || err.response?.data?.message || 'Unable to delete field.'
-    }
+const confirmDelete = (field) => {
+  fieldToDelete.value = field
+  showConfirmModal.value = true
+}
+
+const deleteField = async () => {
+  if (!fieldToDelete.value) return
+  showConfirmModal.value = false
+  
+  try {
+    await farmStore.deleteField(fieldToDelete.value.id)
+    // No need to call refreshFields() if store optimistically updates
+  } catch (err) {
+    console.error('Failed to delete field:', err)
+    error.value = err.userMessage || err.response?.data?.message || 'Unable to delete field.'
   }
 }
 

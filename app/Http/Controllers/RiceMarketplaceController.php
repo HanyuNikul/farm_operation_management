@@ -9,6 +9,7 @@ use App\Models\RiceVariety;
 use App\Models\User;
 use App\Services\SmsService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
@@ -22,18 +23,18 @@ class RiceMarketplaceController extends Controller
         try {
             $user = auth()->user();
             $showMyProducts = $request->boolean('my_products') && $user && $user->isFarmer();
-            
+
             \Log::info('RiceMarketplaceController::getProducts', [
                 'user_id' => $user?->id,
                 'is_farmer' => $user?->isFarmer(),
                 'my_products_param' => $request->input('my_products'),
                 'show_my_products' => $showMyProducts,
             ]);
-            
+
             // For buyers, show only products that are available or in production (for pre-order)
             // For farmers viewing their own products, show all statuses
             $query = RiceProduct::with(['riceVariety', 'farmer', 'reviews']);
-            
+
             if ($showMyProducts) {
                 // Show all products for the logged-in farmer
                 $query->where('farmer_id', $user->id);
@@ -48,11 +49,17 @@ class RiceMarketplaceController extends Controller
                 $query->byVariety($request->variety_id);
             }
 
-            if ($request->has('grade')) {
-                $query->byGrade($request->grade);
+            // Support both 'grade' and 'quality_grade' param names
+            if ($request->has('grade') || $request->has('quality_grade')) {
+                $grade = $request->grade ?? $request->quality_grade;
+                $query->byGrade($grade);
             }
 
-            if ($request->has('organic') && $request->organic) {
+            // Support both 'organic' and 'is_organic' param names
+            if (
+                ($request->has('organic') && $request->organic) ||
+                ($request->has('is_organic') && $request->is_organic)
+            ) {
                 $query->organic();
             }
 
@@ -62,14 +69,20 @@ class RiceMarketplaceController extends Controller
                 $query->where('production_status', $request->production_status);
             }
 
-            if ($request->has('min_price') && $request->has('max_price')) {
-                $query->priceRange($request->min_price, $request->max_price);
+            // Price range filters (can work independently)
+            if ($request->has('min_price') && $request->min_price) {
+                $query->where('price_per_unit', '>=', $request->min_price);
+            }
+
+            if ($request->has('max_price') && $request->max_price) {
+                $query->where('price_per_unit', '<=', $request->max_price);
             }
 
             if ($request->has('location') && $request->has('radius')) {
+
                 $location = $request->location;
                 $radius = $request->radius ?? 50;
-                
+
                 if (isset($location['latitude']) && isset($location['longitude'])) {
                     $query->nearLocation($location['latitude'], $location['longitude'], $radius);
                 }
@@ -80,7 +93,7 @@ class RiceMarketplaceController extends Controller
                 $search = $request->search;
                 $query->where(function ($q) use ($search) {
                     $q->where('name', 'like', "%{$search}%")
-                      ->orWhere('description', 'like', "%{$search}%");
+                        ->orWhere('description', 'like', "%{$search}%");
                 });
             }
 
@@ -94,7 +107,7 @@ class RiceMarketplaceController extends Controller
                     break;
                 case 'rating':
                     $query->withAvg('reviews', 'rating')
-                          ->orderBy('reviews_avg_rating', $sortOrder);
+                        ->orderBy('reviews_avg_rating', $sortOrder);
                     break;
                 case 'quantity':
                     $query->orderBy('quantity_available', $sortOrder);
@@ -123,8 +136,6 @@ class RiceMarketplaceController extends Controller
             $products->getCollection()->transform(function ($product) {
                 $product->quality_score = $product->getQualityScore();
                 $product->freshness_indicator = $product->getFreshnessIndicator();
-                $product->average_rating = $product->average_rating;
-                $product->reviews_count = $product->reviews_count;
                 $product->can_pre_order = $product->canBePreOrdered();
                 return $product;
             });
@@ -141,8 +152,6 @@ class RiceMarketplaceController extends Controller
                     ],
                     'processing_methods' => [
                         RiceProduct::PROCESSING_MILLED => 'Milled',
-                        RiceProduct::PROCESSING_BROWN => 'Brown Rice',
-                        RiceProduct::PROCESSING_PARBOILED => 'Parboiled',
                         RiceProduct::PROCESSING_ORGANIC => 'Organic',
                     ],
                     'production_statuses' => [
@@ -180,8 +189,6 @@ class RiceMarketplaceController extends Controller
             // Add calculated fields
             $product->quality_score = $product->getQualityScore();
             $product->freshness_indicator = $product->getFreshnessIndicator();
-            $product->average_rating = $product->average_rating;
-            $product->reviews_count = $product->reviews_count;
             $product->can_pre_order = $product->canBePreOrdered();
 
             // Get estimated delivery time if user location is available
@@ -196,7 +203,7 @@ class RiceMarketplaceController extends Controller
                 ->where('id', '!=', $product->id)
                 ->where(function ($query) use ($product) {
                     $query->where('rice_variety_id', $product->rice_variety_id)
-                          ->orWhere('quality_grade', $product->quality_grade);
+                        ->orWhere('quality_grade', $product->quality_grade);
                 })
                 ->limit(4)
                 ->get();
@@ -222,31 +229,33 @@ class RiceMarketplaceController extends Controller
         $validator = Validator::make($request->all(), [
             'rice_variety_id' => 'required|exists:rice_varieties,id',
             'harvest_id' => 'nullable|exists:harvests,id',
-            'name' => 'required|string|max:255',
-            'description' => 'required|string|max:2000',
+            'inventory_item_id' => 'nullable|exists:inventory_items,id',
+            'name' => ['required', 'string', 'max:255', new \App\Rules\NoEmoji],
+            'description' => ['required', 'string', 'max:2000', new \App\Rules\NoEmoji],
             'quantity_available' => 'required|numeric|min:0',
-            'unit' => 'required|string|in:kg,tons,bags,sacks',
+            'unit' => 'required|string|in:kg,tons,sacks,bushels,pounds,grams,sacks_rice,sacks_palay',
             'price_per_unit' => 'required|numeric|min:0',
             'quality_grade' => 'required|string|in:premium,grade_a,grade_b,commercial',
             'moisture_content' => 'nullable|numeric|between:5,25',
             'purity_percentage' => 'nullable|numeric|between:50,100',
             'harvest_date' => 'nullable|date|before_or_equal:today',
             'processing_method' => 'nullable|string|in:milled,brown,parboiled,organic',
-            'storage_conditions' => 'nullable|string|max:500',
-            'certification' => 'nullable|string|max:255',
+            'storage_conditions' => ['nullable', 'string', 'max:500', new \App\Rules\NoEmoji],
+            'certification' => ['nullable', 'string', 'max:255', new \App\Rules\NoEmoji],
             'images' => 'nullable|array|max:5',
-            'images.*' => 'string|url',
+            'images.*' => 'string|max:500',
             'location' => 'nullable|array',
             'location.latitude' => 'required_with:location|numeric|between:-90,90',
             'location.longitude' => 'required_with:location|numeric|between:-180,180',
-            'location.address' => 'required_with:location|string|max:255',
+            'location.address' => ['required_with:location', 'string', 'max:255', new \App\Rules\NoEmoji],
             'is_organic' => 'boolean',
             'minimum_order_quantity' => 'nullable|numeric|min:0',
             'packaging_options' => 'nullable|array',
             'delivery_options' => 'nullable|array',
-            'payment_terms' => 'nullable|string|max:500',
+            'payment_terms' => ['nullable', 'string', 'max:500', new \App\Rules\NoEmoji],
             'contact_info' => 'nullable|array',
-            'notes' => 'nullable|string|max:1000',
+            'notes' => ['nullable', 'string', 'max:1000', new \App\Rules\NoEmoji],
+            'production_status' => 'nullable|string|in:available,in_production,out_of_stock',
         ]);
 
         if ($validator->fails()) {
@@ -268,11 +277,22 @@ class RiceMarketplaceController extends Controller
             $product = RiceProduct::create(array_merge($validated, [
                 'farmer_id' => $user->id,
                 'is_available' => true,
-                'production_status' => $validated['production_status'] ?? RiceProduct::STATUS_AVAILABLE, // Ensure production_status is set
+                'production_status' => $validated['production_status'] ?? RiceProduct::STATUS_AVAILABLE,
             ]));
+
+            // Auto-link inventory if not provided
+            if (!$product->inventory_item_id) {
+                $inventoryItem = $product->findMatchingInventoryItem();
+                if ($inventoryItem) {
+                    $product->update(['inventory_item_id' => $inventoryItem->id]);
+                }
+            }
 
             // Log product creation
             \App\Models\ActivityLog::log('product.created', $product, null, $product->toArray(), "New product listing published");
+
+            // Invalidate marketplace stats cache
+            Cache::forget('marketplace_stats');
 
             return response()->json([
                 'message' => 'Rice product created successfully',
@@ -280,6 +300,11 @@ class RiceMarketplaceController extends Controller
             ], 201);
 
         } catch (\Exception $e) {
+            \Log::error('Product creation failed: ' . $e->getMessage(), [
+                'user_id' => auth()->id(),
+                'payload' => $request->all(),
+                'trace' => $e->getTraceAsString()
+            ]);
             return response()->json([
                 'message' => 'Failed to create rice product',
                 'error' => $e->getMessage()
@@ -303,8 +328,10 @@ class RiceMarketplaceController extends Controller
 
             $validator = Validator::make($request->all(), [
                 'name' => 'string|max:255',
+                'inventory_item_id' => 'nullable|exists:inventory_items,id',
                 'description' => 'string|max:2000',
                 'quantity_available' => 'numeric|min:0',
+                'unit' => 'string|in:kg,tons,sacks,bushels,pounds,grams,sacks_rice,sacks_palay',
                 'price_per_unit' => 'numeric|min:0',
                 'quality_grade' => 'string|in:premium,grade_a,grade_b,commercial',
                 'moisture_content' => 'nullable|numeric|between:5,25',
@@ -313,7 +340,7 @@ class RiceMarketplaceController extends Controller
                 'storage_conditions' => 'nullable|string|max:500',
                 'certification' => 'nullable|string|max:255',
                 'images' => 'nullable|array|max:5',
-                'images.*' => 'string|url',
+                'images.*' => 'string|max:500',
                 'is_organic' => 'boolean',
                 'is_available' => 'boolean',
                 'minimum_order_quantity' => 'nullable|numeric|min:0',
@@ -333,12 +360,30 @@ class RiceMarketplaceController extends Controller
 
             $product->update($validator->validated());
 
+            // Auto-link inventory if not provided
+            if (!$product->inventory_item_id) {
+                $inventoryItem = $product->findMatchingInventoryItem();
+                if ($inventoryItem) {
+                    $product->update(['inventory_item_id' => $inventoryItem->id]);
+                }
+            }
+
+            // Invalidate caches
+            Cache::forget('marketplace_stats');
+            Cache::forget("rice_product_{$id}");
+
             return response()->json([
                 'message' => 'Rice product updated successfully',
                 'product' => $product->load(['riceVariety', 'farmer']),
             ]);
 
         } catch (\Exception $e) {
+            \Log::error('Product update failed: ' . $e->getMessage(), [
+                'user_id' => auth()->id(),
+                'product_id' => $id,
+                'payload' => $request->all(),
+                'trace' => $e->getTraceAsString()
+            ]);
             return response()->json([
                 'message' => 'Failed to update rice product',
                 'error' => $e->getMessage()
@@ -373,6 +418,9 @@ class RiceMarketplaceController extends Controller
 
             $product->delete();
 
+            // Invalidate marketplace stats cache
+            Cache::forget('marketplace_stats');
+
             return response()->json([
                 'message' => 'Rice product deleted successfully'
             ]);
@@ -385,111 +433,7 @@ class RiceMarketplaceController extends Controller
         }
     }
 
-    /**
-     * Create an order for rice product (users only)
-     */
-    public function createOrder(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'rice_product_id' => 'required|exists:rice_products,id',
-            'quantity' => 'required|numeric|min:0.1',
-            'delivery_address' => 'required|array',
-            'delivery_address.street' => 'required|string|max:255',
-            'delivery_address.city' => 'required|string|max:100',
-            'delivery_address.state' => 'required|string|max:100',
-            'delivery_address.postal_code' => 'required|string|max:20',
-            'delivery_address.country' => 'required|string|max:100',
-            'delivery_method' => 'required|string|in:pickup,courier,postal,truck',
-            'payment_method' => 'required|string|max:50',
-            'notes' => 'nullable|string|max:500',
-        ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        try {
-            DB::beginTransaction();
-
-            $user = auth()->user();
-
-            // Check if user can buy (is a regular user, not farmer)
-            if (!$user->canBuy()) {
-                return response()->json(['message' => 'Only marketplace users can place orders'], 403);
-            }
-
-            $product = RiceProduct::findOrFail($request->rice_product_id);
-
-            // Check if product is available or can be pre-ordered
-            if (!$product->is_available && !$product->canBePreOrdered()) {
-                return response()->json(['message' => 'Product is not available for order'], 400);
-            }
-
-            $isPreOrder = $product->isInProduction();
-
-            // For available products, check quantity
-            if (!$isPreOrder) {
-                // Check if sufficient quantity is available
-                if (!$product->hasSufficientQuantity($request->quantity)) {
-                    return response()->json([
-                        'message' => 'Insufficient quantity available',
-                        'available_quantity' => $product->quantity_available
-                    ], 400);
-                }
-            }
-
-            // Check minimum order quantity
-            if ($product->minimum_order_quantity && $request->quantity < $product->minimum_order_quantity) {
-                return response()->json([
-                    'message' => 'Order quantity is below minimum required',
-                    'minimum_quantity' => $product->minimum_order_quantity
-                ], 400);
-            }
-
-            // Calculate total amount
-            $totalAmount = $request->quantity * $product->price_per_unit;
-
-            // Determine available date for pre-orders
-            $availableDate = $isPreOrder ? $product->available_from : null;
-
-            // Create the order
-            $order = RiceOrder::create([
-                'buyer_id' => $user->id,
-                'rice_product_id' => $product->id,
-                'quantity' => $request->quantity,
-                'unit_price' => $product->price_per_unit,
-                'total_amount' => $totalAmount,
-                'status' => RiceOrder::STATUS_PENDING,
-                'is_pre_order' => $isPreOrder,
-                'available_date' => $availableDate,
-                'delivery_address' => $request->delivery_address,
-                'delivery_method' => $request->delivery_method,
-                'payment_method' => $request->payment_method,
-                'payment_status' => RiceOrder::PAYMENT_PENDING,
-                'notes' => $request->notes,
-                'order_date' => now(),
-            ]);
-
-            DB::commit();
-
-            return response()->json([
-                'message' => $isPreOrder ? 'Pre-order created successfully' : 'Order created successfully',
-                'order' => $order->load(['riceProduct.riceVariety', 'riceProduct.farmer']),
-                'is_pre_order' => $isPreOrder,
-            ], 201);
-
-        } catch (\Exception $e) {
-            DB::rollback();
-            
-            return response()->json([
-                'message' => 'Failed to create order',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
 
     /**
      * Get orders for current user
@@ -498,7 +442,7 @@ class RiceMarketplaceController extends Controller
     {
         try {
             $user = auth()->user();
-            
+
             $query = RiceOrder::with(['riceProduct.riceVariety', 'riceProduct.farmer']);
 
             if ($user->isFarmer()) {
@@ -552,7 +496,7 @@ class RiceMarketplaceController extends Controller
     {
         try {
             $user = auth()->user();
-            
+
             $order = RiceOrder::with([
                 'riceProduct.riceVariety',
                 'riceProduct.farmer',
@@ -561,7 +505,7 @@ class RiceMarketplaceController extends Controller
 
             // Check if user can access this order
             $canAccess = ($user->isFarmer() && $order->riceProduct->farmer_id === $user->id) ||
-                        ($user->canBuy() && $order->buyer_id === $user->id);
+                ($user->canBuy() && $order->buyer_id === $user->id);
 
             if (!$canAccess) {
                 return response()->json(['message' => 'Unauthorized'], 403);
@@ -652,7 +596,7 @@ class RiceMarketplaceController extends Controller
 
             // Check if user can cancel this order
             $canCancel = ($user->isFarmer() && $order->riceProduct->farmer_id === $user->id) ||
-                        ($user->canBuy() && $order->buyer_id === $user->id);
+                ($user->canBuy() && $order->buyer_id === $user->id);
 
             if (!$canCancel) {
                 return response()->json(['message' => 'Unauthorized'], 403);
@@ -679,36 +623,94 @@ class RiceMarketplaceController extends Controller
     }
 
     /**
+     * Respond to negotiation (farmers only)
+     */
+    public function respondToNegotiation(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'action' => 'required|in:accept,reject',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $user = auth()->user();
+            $order = RiceOrder::with('riceProduct')->findOrFail($id);
+
+            // Check if user is the farmer for this product
+            if (!$user->isFarmer() || $order->riceProduct->farmer_id !== $user->id) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+
+            // Check if order is negotiating
+            if ($order->status !== RiceOrder::STATUS_NEGOTIATING) {
+                return response()->json(['message' => 'Order is not in negotiation'], 400);
+            }
+
+            if ($request->action === 'accept') {
+                // Accept negotiation: Update unit price and total amount, set status to pending
+                $order->update([
+                    'unit_price' => $order->offer_price,
+                    // Total amount is already updated in createOrder but safe to recalculate or keep as is
+                    'status' => RiceOrder::STATUS_PENDING,
+                    'farmer_notes' => 'Price negotiation accepted.',
+                ]);
+            } else {
+                // Reject negotiation: Cancel order
+                $order->cancel('Price negotiation rejected by farmer.');
+            }
+
+            return response()->json([
+                'message' => 'Negotiation response recorded successfully',
+                'order' => $order->fresh(),
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to respond to negotiation',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Get marketplace statistics
      */
     public function getMarketplaceStats()
     {
         try {
-            $stats = [
-                'total_products' => RiceProduct::available()->count(),
-                'total_farmers' => User::where('role', User::ROLE_FARMER)
-                    ->whereHas('riceProducts', function ($query) {
-                        $query->available();
-                    })->count(),
-                'total_orders' => RiceOrder::count(),
-                'active_orders' => RiceOrder::active()->count(),
-                'total_rice_varieties' => RiceVariety::active()->count(),
-                'by_grade' => RiceProduct::available()
-                    ->select('quality_grade', DB::raw('count(*) as count'))
-                    ->groupBy('quality_grade')
-                    ->pluck('count', 'quality_grade'),
-                'by_processing' => RiceProduct::available()
-                    ->select('processing_method', DB::raw('count(*) as count'))
-                    ->groupBy('processing_method')
-                    ->pluck('count', 'processing_method'),
-                'organic_products' => RiceProduct::available()->organic()->count(),
-                'average_price' => RiceProduct::available()->avg('price_per_unit'),
-                'recent_products' => RiceProduct::with(['riceVariety', 'farmer'])
-                    ->available()
-                    ->latest()
-                    ->limit(5)
-                    ->get(),
-            ];
+            $stats = Cache::remember('marketplace_stats', now()->addMinutes(60), function () {
+                return [
+                    'total_products' => RiceProduct::available()->count(),
+                    'total_farmers' => User::where('role', User::ROLE_FARMER)
+                        ->whereHas('riceProducts', function ($query) {
+                            $query->available();
+                        })->count(),
+                    'total_orders' => RiceOrder::count(),
+                    'active_orders' => RiceOrder::active()->count(),
+                    'total_rice_varieties' => RiceVariety::active()->count(),
+                    'by_grade' => RiceProduct::available()
+                        ->select('quality_grade', DB::raw('count(*) as count'))
+                        ->groupBy('quality_grade')
+                        ->pluck('count', 'quality_grade'),
+                    'by_processing' => RiceProduct::available()
+                        ->select('processing_method', DB::raw('count(*) as count'))
+                        ->groupBy('processing_method')
+                        ->pluck('count', 'processing_method'),
+                    'organic_products' => RiceProduct::available()->organic()->count(),
+                    'average_price' => RiceProduct::available()->avg('price_per_unit'),
+                    'recent_products' => RiceProduct::with(['riceVariety', 'farmer'])
+                        ->available()
+                        ->latest()
+                        ->limit(5)
+                        ->get(),
+                ];
+            });
 
             return response()->json([
                 'stats' => $stats,
@@ -717,6 +719,93 @@ class RiceMarketplaceController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Failed to fetch marketplace statistics',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get farmer-specific order statistics with revenue trend
+     */
+    public function getFarmerOrderStats(Request $request)
+    {
+        try {
+            $user = auth()->user();
+
+            if (!$user->isFarmer()) {
+                return response()->json(['message' => 'Only farmers can access order stats'], 403);
+            }
+
+            $stats = Cache::remember("farmer_order_stats_{$user->id}", now()->addMinutes(15), function () use ($user) {
+                // Base query for farmer's orders
+                $baseQuery = RiceOrder::forFarmer($user->id);
+
+                // Total revenue (from all paid orders)
+                $totalRevenue = (clone $baseQuery)
+                    ->where('payment_status', RiceOrder::PAYMENT_PAID)
+                    ->sum('total_amount');
+
+                // Total orders count
+                $totalOrders = (clone $baseQuery)->count();
+
+                // Orders by status
+                $ordersByStatus = (clone $baseQuery)
+                    ->select('status', DB::raw('count(*) as count'))
+                    ->groupBy('status')
+                    ->pluck('count', 'status');
+
+                // Revenue trend for last 7 days (Optimized to single query)
+                $endDate = now();
+                $startDate = now()->subDays(6);
+
+                $dailyRevenueMap = RiceOrder::forFarmer($user->id)
+                    ->whereDate('order_date', '>=', $startDate)
+                    ->whereDate('order_date', '<=', $endDate)
+                    ->where('payment_status', RiceOrder::PAYMENT_PAID)
+                    ->selectRaw('DATE(order_date) as date, SUM(total_amount) as daily_total')
+                    ->groupBy('date')
+                    ->pluck('daily_total', 'date');
+
+                $revenueTrend = [];
+                for ($i = 6; $i >= 0; $i--) {
+                    $date = now()->subDays($i)->format('Y-m-d');
+                    $revenueTrend[] = [
+                        'date' => $date,
+                        'day' => now()->subDays($i)->format('D'),
+                        'revenue' => (float) ($dailyRevenueMap[$date] ?? 0),
+                    ];
+                }
+
+                // Active orders (pending + confirmed + processing + shipped)
+                $pendingCount = $ordersByStatus[RiceOrder::STATUS_PENDING] ?? 0;
+                $confirmedCount = $ordersByStatus[RiceOrder::STATUS_CONFIRMED] ?? 0;
+                $processingCount = $ordersByStatus[RiceOrder::STATUS_PROCESSING] ?? 0;
+                $shippedCount = $ordersByStatus[RiceOrder::STATUS_SHIPPED] ?? 0;
+                $pickedUpCount = $ordersByStatus[RiceOrder::STATUS_PICKED_UP] ?? 0;
+                $deliveredCount = ($ordersByStatus[RiceOrder::STATUS_DELIVERED] ?? 0) + $pickedUpCount;
+                $cancelledCount = $ordersByStatus[RiceOrder::STATUS_CANCELLED] ?? 0;
+
+                return [
+                    'total_revenue' => (float) $totalRevenue,
+                    'total_orders' => $totalOrders,
+                    'pending' => $pendingCount,
+                    'confirmed' => $confirmedCount,
+                    'processing' => $processingCount,
+                    'shipped' => $shippedCount,
+                    'delivered' => $deliveredCount,
+                    'cancelled' => $cancelledCount,
+                    'active_orders' => $pendingCount + $confirmedCount + $processingCount + $shippedCount,
+                    'revenue_trend' => $revenueTrend,
+                ];
+            });
+
+            return response()->json([
+                'stats' => $stats,
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to fetch order statistics',
                 'error' => $e->getMessage()
             ], 500);
         }

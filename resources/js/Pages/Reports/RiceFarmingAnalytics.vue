@@ -1,5 +1,5 @@
 <template>
-  <div class="p-6 max-w-7xl mx-auto">
+  <div class="p-6 w-full mx-auto">
     <!-- Header -->
     <div class="mb-8">
       <div class="flex justify-between items-center">
@@ -48,8 +48,8 @@
             </div>
             <div class="ml-4">
               <p class="text-sm font-medium text-gray-500">Total Yield</p>
-              <p class="text-2xl font-bold text-gray-900">{{ analytics.production_analytics?.total_yield || 0 }} kg</p>
-              <p class="text-xs text-gray-500">{{ analytics.production_analytics?.average_yield_per_hectare || 0 }} kg/ha avg</p>
+              <p class="text-2xl font-bold text-gray-900">{{ analytics.production_analytics?.total_yield || 0 }} {{ yieldUnit }}</p>
+              <p class="text-xs text-gray-500">{{ analytics.production_analytics?.average_yield_per_hectare || 0 }} {{ yieldUnit }}/ha avg</p>
             </div>
           </div>
         </div>
@@ -150,8 +150,8 @@
                   <p class="text-xs text-gray-500">{{ variety.total_area }} ha planted</p>
                 </div>
                 <div class="text-right">
-                  <p class="text-sm font-bold text-green-600">{{ variety.yield_per_hectare }} kg/ha</p>
-                  <p class="text-xs text-gray-500">{{ variety.total_yield }} kg total</p>
+                  <p class="text-sm font-bold text-green-600">{{ variety.yield_per_hectare }} {{ yieldUnit }}/ha</p>
+                  <p class="text-xs text-gray-500">{{ variety.total_yield }} {{ yieldUnit }} total</p>
                 </div>
               </div>
             </div>
@@ -187,7 +187,7 @@
                     </div>
                     <span class="text-xs text-gray-600">{{ field.productivity_score }}%</span>
                   </div>
-                  <p class="text-xs text-gray-500">{{ field.yield_per_hectare }} kg/ha</p>
+                  <p class="text-xs text-gray-500">{{ field.yield_per_hectare }} {{ yieldUnit }}/ha</p>
                 </div>
               </div>
             </div>
@@ -229,47 +229,147 @@
       </div>
 
       <!-- Efficiency Metrics -->
-      <div class="bg-white rounded-lg shadow">
-        <div class="px-6 py-4 border-b border-gray-200">
-          <h2 class="text-lg font-semibold text-gray-900">Efficiency Metrics</h2>
-        </div>
-        <div class="p-6">
-          <div v-if="analytics.efficiency_metrics" class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div class="text-center">
-              <div class="w-24 h-24 mx-auto mb-4">
-                <PieChart
-                  :data="formatEfficiencyData('Stage Completion', analytics.efficiency_metrics.stage_completion_efficiency)"
-                  :options="{ responsive: true, maintainAspectRatio: false }"
-                />
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div class="bg-white rounded-lg shadow">
+          <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">Crop Efficiency</h2>
+          </div>
+          <div class="p-6">
+            <div v-if="analytics.efficiency_metrics" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="text-center">
+                <div class="w-24 h-24 mx-auto mb-4">
+                  <PieChart
+                    :data="formatEfficiencyData('Stage Completion', analytics.efficiency_metrics.stage_completion_efficiency)"
+                    :options="{ responsive: true, maintainAspectRatio: false }"
+                  />
+                </div>
+                <p class="text-sm font-medium text-gray-900">Stage Completion</p>
+                <p class="text-xs text-gray-500">{{ analytics.efficiency_metrics.stage_completion_efficiency }}% on time</p>
               </div>
-              <p class="text-sm font-medium text-gray-900">Stage Completion</p>
-              <p class="text-xs text-gray-500">{{ analytics.efficiency_metrics.stage_completion_efficiency }}% on time</p>
-            </div>
-            
-            <div class="text-center">
-              <div class="w-24 h-24 mx-auto mb-4">
-                <PieChart
-                  :data="formatEfficiencyData('Yield Efficiency', analytics.efficiency_metrics.yield_efficiency)"
-                  :options="{ responsive: true, maintainAspectRatio: false }"
-                />
+              
+              <div class="text-center">
+                <div class="w-24 h-24 mx-auto mb-4">
+                  <PieChart
+                    :data="formatEfficiencyData('Yield Efficiency', analytics.efficiency_metrics.yield_efficiency)"
+                    :options="{ responsive: true, maintainAspectRatio: false }"
+                  />
+                </div>
+                <p class="text-sm font-medium text-gray-900">Yield Efficiency</p>
+                <p class="text-xs text-gray-500">{{ analytics.efficiency_metrics.yield_efficiency }}% of expected</p>
               </div>
-              <p class="text-sm font-medium text-gray-900">Yield Efficiency</p>
-              <p class="text-xs text-gray-500">{{ analytics.efficiency_metrics.yield_efficiency }}% of expected</p>
             </div>
-            
-            <div class="text-center">
-              <p class="text-lg font-bold text-gray-900">{{ analytics.efficiency_metrics.average_growth_cycle_days }} days</p>
-              <p class="text-sm text-gray-600">Average Growth Cycle</p>
-              <p class="text-xs text-gray-500">From planting to harvest</p>
+            <div v-else class="text-center py-8 text-gray-500">
+              No crop efficiency data available
             </div>
           </div>
-          <div v-else class="text-center py-8 text-gray-500">
-            No efficiency data available
+        </div>
+
+        <!-- NEW: Post-Harvest Efficiency -->
+        <div class="bg-white rounded-lg shadow">
+          <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">Post-Harvest Efficiency</h2>
+          </div>
+          <div class="p-6">
+            <div v-if="analytics.post_harvest_efficiency" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="text-center">
+                <div class="w-24 h-24 mx-auto mb-4">
+                  <PieChart
+                    :data="formatEfficiencyData('Recovery Rate', analytics.post_harvest_efficiency.average_recovery_rate)"
+                    :options="{ responsive: true, maintainAspectRatio: false }"
+                  />
+                </div>
+                <p class="text-sm font-medium text-gray-900">Avg. Recovery Rate</p>
+                <p class="text-xs text-gray-500">{{ analytics.post_harvest_efficiency.average_recovery_rate }}% yield recovered</p>
+              </div>
+              
+              <div class="text-center flex flex-col justify-center">
+                <div class="p-4 bg-orange-50 rounded-lg mb-4">
+                   <p class="text-2xl font-bold text-orange-600">{{ analytics.post_harvest_efficiency.average_weight_loss }}%</p>
+                   <p class="text-xs text-gray-600">Avg. Weight Loss</p>
+                </div>
+                <div class="p-4 bg-green-50 rounded-lg">
+                   <p class="text-2xl font-bold text-green-600">{{ formatCurrency(analytics.post_harvest_efficiency.cost_efficiency?.avg_cost_per_bushel || 0) }}</p>
+                   <p class="text-xs text-gray-600">Avg. Cost / Bushel</p>
+                </div>
+              </div>
+            </div>
+            <div v-else class="text-center py-8 text-gray-500">
+              No post-harvest efficiency data available. Start recording processing steps to see metrics.
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Recommendations -->
+      <!-- Crop Failure Insights -->
+      <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center gap-2">
+          <h2 class="text-lg font-semibold text-gray-900">Crop Failure Insights</h2>
+          <span v-if="analytics.failure_analysis?.total_failed > 0"
+            class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+            {{ analytics.failure_analysis.total_failed }} failed
+          </span>
+        </div>
+        <div class="p-6">
+          <!-- Empty state -->
+          <div v-if="!analytics.failure_analysis?.total_failed"
+            class="flex flex-col items-center justify-center py-8 text-center">
+            <span class="text-4xl mb-3">🌾</span>
+            <p class="text-sm font-medium text-gray-700">No crop failures recorded</p>
+            <p class="text-xs text-gray-400 mt-1">No failed plantings in the selected period.</p>
+          </div>
+
+          <!-- Failure data -->
+          <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Left: Key Stats -->
+            <div class="space-y-4">
+              <div class="grid grid-cols-2 gap-4">
+                <div class="p-4 bg-red-50 rounded-lg border border-red-100 text-center">
+                  <p class="text-2xl font-bold text-red-600">{{ analytics.failure_analysis.failure_rate_pct }}%</p>
+                  <p class="text-xs text-gray-500 mt-1">Failure Rate</p>
+                </div>
+                <div class="p-4 bg-gray-50 rounded-lg border border-gray-100 text-center">
+                  <p class="text-2xl font-bold text-gray-700">{{ analytics.failure_analysis.total_failed }}</p>
+                  <p class="text-xs text-gray-500 mt-1">Failed Plantings</p>
+                </div>
+                <div class="p-4 bg-orange-50 rounded-lg border border-orange-100 text-center">
+                  <p class="text-2xl font-bold text-orange-600">{{ analytics.failure_analysis.avg_days_before_failure }}</p>
+                  <p class="text-xs text-gray-500 mt-1">Avg Days Before Failure</p>
+                </div>
+                <div class="p-4 bg-yellow-50 rounded-lg border border-yellow-100 text-center">
+                  <p class="text-sm font-bold text-yellow-700 leading-tight">
+                    {{ analytics.failure_analysis.by_category?.[0]?.category || '—' }}
+                  </p>
+                  <p class="text-xs text-gray-500 mt-1">Top Failure Cause</p>
+                </div>
+              </div>
+              <!-- By category list -->
+              <div v-if="analytics.failure_analysis.by_category?.length" class="space-y-2">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Breakdown by Category</p>
+                <div
+                  v-for="cat in analytics.failure_analysis.by_category"
+                  :key="cat.category"
+                  class="flex items-center justify-between text-sm"
+                >
+                  <span class="text-gray-700">{{ cat.category }}</span>
+                  <span class="font-semibold text-red-600">{{ cat.count }} planting{{ cat.count !== 1 ? 's' : '' }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Pie Chart -->
+            <div class="flex flex-col items-center justify-center">
+              <div class="w-48 h-48 mb-4">
+                <PieChart
+                  :data="failureCategoryChartData"
+                  :options="{ responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }"
+                />
+              </div>
+              <p class="text-xs text-gray-400">Failure categories distribution</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="bg-white rounded-lg shadow">
         <div class="px-6 py-4 border-b border-gray-200">
           <h2 class="text-lg font-semibold text-gray-900">Recommendations</h2>
@@ -334,7 +434,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { analyticsAPI } from '@/services/api';
 import { formatCurrency } from '@/utils/format';
 import {
@@ -355,6 +455,9 @@ const analytics = ref(null);
 const loading = ref(true);
 const error = ref('');
 const selectedPeriod = ref('12');
+const yieldUnit = computed(() => {
+  return analytics.value?.production_analytics?.yield_unit || 'kg';
+});
 
 // Chart options
 const chartOptions = {
@@ -390,12 +493,29 @@ const loadAnalytics = async () => {
   }
 };
 
+// Failure category pie chart data
+const FAILURE_CATEGORY_COLORS = [
+  '#ef4444', '#f97316', '#eab308', '#8b5cf6', '#06b6d4', '#6b7280'
+];
+
+const failureCategoryChartData = computed(() => {
+  const cats = analytics.value?.failure_analysis?.by_category || [];
+  return {
+    labels: cats.map(c => c.category),
+    datasets: [{
+      data: cats.map(c => c.count),
+      backgroundColor: cats.map((_, i) => FAILURE_CATEGORY_COLORS[i % FAILURE_CATEGORY_COLORS.length]),
+      borderWidth: 0,
+    }],
+  };
+});
+
 const formatProductionChartData = (monthlyProduction) => {
   return {
     labels: monthlyProduction.map(item => item.month),
     datasets: [
       {
-        label: 'Total Yield (kg)',
+        label: `Total Yield (${yieldUnit.value})`,
         data: monthlyProduction.map(item => item.total_yield),
         borderColor: 'rgb(34, 197, 94)',
         backgroundColor: 'rgba(34, 197, 94, 0.1)',
@@ -442,9 +562,41 @@ const formatEfficiencyData = (label, value) => {
 };
 
 const exportReport = () => {
-  // Implement report export functionality
-  console.log('Exporting analytics report...');
-  // You could generate a PDF or CSV file here
+  if (!analyticsData.value) return;
+
+  const data = analyticsData.value;
+  let csvContent = "data:text/csv;charset=utf-8,";
+
+  // Section 1: Summary
+  csvContent += "Category,Metric,Value\n";
+  csvContent += `Production,Total Yield (kg),${data.production_analytics?.total_yield || 0}\n`;
+  csvContent += `Production,Avg Yield per Hectar (kg),${data.production_analytics?.average_yield_per_hectare || 0}\n`;
+  csvContent += `Financial,Total Revenue (PHP),${data.financial_analytics?.total_revenue || 0}\n`;
+  csvContent += `Financial,Total Expenses (PHP),${data.financial_analytics?.total_expenses || 0}\n`;
+  csvContent += `Financial,Profit Margin (%),${data.financial_analytics?.profit_margin || 0}\n`;
+  csvContent += `Efficiency,Stage Completion (%),${data.efficiency_metrics?.stage_completion_efficiency || 0}\n`;
+  csvContent += `Efficiency,Yield Efficiency (%),${data.efficiency_metrics?.yield_efficiency || 0}\n`;
+  csvContent += `Weather,Weather Suitability (%),${data.weather_impact?.average_weather_suitability || 0}\n`;
+  csvContent += `Weather,Risk Assessment,${data.weather_impact?.weather_risk_assessment || 'N/A'}\n`;
+  csvContent += "\n";
+
+  // Section 2: Field Performance
+  if (data.field_performance?.field_performance?.length) {
+    csvContent += "Field Name,Size (ha),Productivity Score (%),Avg Yield Gap (%),Yield/ha\n";
+    data.field_performance.field_performance.forEach(field => {
+      csvContent += `${field.field_name},${field.size},${field.productivity_score},${field.average_yield_gap_pct},${field.yield_per_hectare}\n`;
+    });
+    csvContent += "\n";
+  }
+
+  // Generate download
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", `farm_analytics_report_${new Date().toISOString().split('T')[0]}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 };
 
 onMounted(() => {

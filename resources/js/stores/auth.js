@@ -34,7 +34,6 @@ export const useAuthStore = defineStore('auth', {
         localStorage.setItem('token', this.token);
         axios.defaults.headers.common['Authorization'] = `Bearer ${this.token}`;
 
-        console.log('✓ Login successful for user:', this.user.name);
         return response.data;
       } catch (error) {
         console.error('Login error:', error);
@@ -83,12 +82,18 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
-    async verifyPhone(phone, code) {
+    async verifyPhone(identifier, code) {
       this.loading = true;
       this.error = null;
 
       try {
-        const response = await axios.post('/api/verify-phone', { phone, code });
+        // Determine if identifier is email or phone
+        const isEmail = identifier && identifier.includes('@');
+        const payload = isEmail
+          ? { email: identifier, code }
+          : { phone: identifier, code };
+
+        const response = await axios.post('/api/verify-phone', payload);
 
         this.token = response.data.token;
         this.user = response.data.user;
@@ -142,7 +147,6 @@ export const useAuthStore = defineStore('auth', {
         }
 
         this.user = response.data.user;
-        console.log('✓ User data fetched successfully');
       } catch (error) {
         console.error('Fetch user error:', error);
 

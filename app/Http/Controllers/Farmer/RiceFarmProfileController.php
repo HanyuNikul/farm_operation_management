@@ -28,32 +28,35 @@ class RiceFarmProfileController extends Controller
             'rice_area' => 'required|numeric|min:0|lte:total_area',
             'farming_experience' => 'nullable|integer|min:0',
             'farm_description' => 'nullable|string|max:1000',
-            'field_name' => 'required|string|max:255',
-            
-            // Soil Information
-            'soil_type' => 'required|string|in:clay,loam,sandy,silt,clay_loam,sandy_loam,silty_clay,silty_loam',
+
+            // Field - Made Optional
+            'field_name' => 'nullable|string|max:255',
+            'field_size' => 'nullable|numeric|min:0|lte:total_area',
+
+            // Soil Information - Made Optional
+            'soil_type' => 'nullable|string|in:clay,loam,sandy,silt,clay_loam,sandy_loam,silty_clay,silty_loam',
             'soil_ph' => 'nullable|numeric|between:3.0,10.0',
             'organic_matter_content' => 'nullable|numeric|between:0,20',
             'nitrogen_level' => 'nullable|numeric|min:0',
             'phosphorus_level' => 'nullable|numeric|min:0',
             'potassium_level' => 'nullable|numeric|min:0',
             'elevation' => 'nullable|numeric|min:0',
-            
-            // Water Management
-            'water_source' => 'required|string|in:irrigation_canal,river,well,shallow_well,pond,rainfall,spring',
-            'irrigation_type' => 'required|string|in:flood,furrow,sprinkler,drip,manual,none',
-            'water_access' => 'required|string|in:excellent,good,moderate,poor,very_poor',
-            'drainage_quality' => 'required|string|in:excellent,good,moderate,poor',
-            
-            // Rice Varieties and Practices
-            'preferred_varieties' => 'nullable|array',
-            'preferred_varieties.*' => 'string',
-            'planting_method' => 'nullable|string|in:direct_seeding,transplanting,broadcasting,drilling',
-            'previous_yield' => 'nullable|numeric|min:0',
+
+            // Water Management - Made Optional
+            'water_source' => 'nullable|string|in:irrigation_canal,river,well,shallow_well,pond,rainfall,spring',
+            'irrigation_type' => 'nullable|string|in:flood,furrow,sprinkler,drip,manual,none',
+            'water_access' => 'nullable|string|in:excellent,good,moderate,poor,very_poor',
+            'drainage_quality' => 'nullable|string|in:excellent,good,moderate,poor',
+
+            // Cultivation Plans & Notes
+            'nickname' => 'nullable|string|max:255',
+            'planting_method' => 'nullable|string|max:255',
+            'cropping_seasons' => 'nullable|integer|min:1|max:3',
             'target_yield' => 'nullable|numeric|min:0',
-            'cropping_seasons' => 'nullable|string|in:1,2,3',
-            'farming_challenges' => 'nullable|array',
-            'farming_challenges.*' => 'string',
+            'infrastructure_notes' => 'nullable|string|max:1000',
+            'previous_crop' => 'nullable|string|max:255',
+
+
         ]);
 
         if ($validator->fails()) {
@@ -65,6 +68,7 @@ class RiceFarmProfileController extends Controller
 
         try {
             DB::beginTransaction();
+            Log::info('Onboarding Payload:', $request->all());
 
             $user = auth()->user();
 
@@ -80,46 +84,64 @@ class RiceFarmProfileController extends Controller
 
             // Geocode the location to get coordinates for weather data
             $coordinates = $this->geocodeLocation($request->location);
-            
+
             // Prepare location data with coordinates if available
             $locationData = ['address' => $request->location];
             if ($coordinates) {
                 $locationData['lat'] = $coordinates['latitude'];
                 $locationData['lon'] = $coordinates['longitude'];
             }
-            
-            // Create main rice field with comprehensive data
-            $fieldName = $request->field_name ?? 'Main Rice Field';
-            $field = Field::updateOrCreate(
-                [
-                    'user_id' => $user->id,
-                    'farm_id' => $farm->id,
-                    'name' => $fieldName
-                ],
-                [
-                    'location' => $locationData,
-                    'field_coordinates' => $coordinates ? [
-                        'lat' => $coordinates['latitude'],
-                        'lon' => $coordinates['longitude']
-                    ] : null,
-                    'soil_type' => $request->soil_type,
-                    'soil_ph' => $request->soil_ph,
-                    'organic_matter_content' => $request->organic_matter_content,
-                    'nitrogen_level' => $request->nitrogen_level,
-                    'phosphorus_level' => $request->phosphorus_level,
-                    'potassium_level' => $request->potassium_level,
-                    'size' => $request->rice_area,
-                    'water_access' => $request->water_access,
-                    'water_source' => $request->water_source,
-                    'irrigation_type' => $request->irrigation_type,
-                    'drainage_quality' => $request->drainage_quality,
-                    'elevation' => $request->elevation,
-                    'slope' => null, // Can be added later
-                    'previous_crop' => 'rice',
-                    'field_preparation_status' => 'needs_assessment',
-                    'notes' => $this->generateFieldNotes($request),
-                ]
-            );
+
+            // Create main rice field only if relevant data is provided
+            $field = null;
+            $hasFieldData = $request->hasAny([
+                'field_name',
+                'field_size',
+                'soil_type',
+                'water_source',
+                'irrigation_type',
+                'water_access',
+                'drainage_quality'
+            ]);
+
+            if ($hasFieldData) {
+                $fieldName = $request->field_name ?? 'Main Rice Field';
+                $field = Field::updateOrCreate(
+                    [
+                        'user_id' => $user->id,
+                        'farm_id' => $farm->id,
+                        'name' => $fieldName
+                    ],
+                    [
+                        'location' => $locationData,
+                        'field_coordinates' => $coordinates ? [
+                            'lat' => $coordinates['latitude'],
+                            'lon' => $coordinates['longitude']
+                        ] : null,
+                        'soil_type' => $request->soil_type,
+                        'soil_ph' => $request->soil_ph,
+                        'organic_matter_content' => $request->organic_matter_content,
+                        'nitrogen_level' => $request->nitrogen_level,
+                        'phosphorus_level' => $request->phosphorus_level,
+                        'potassium_level' => $request->potassium_level,
+                        'size' => $request->field_size ?? $request->rice_area,
+                        'water_access' => $request->water_access,
+                        'water_source' => $request->water_source,
+                        'irrigation_type' => $request->irrigation_type,
+                        'drainage_quality' => $request->drainage_quality,
+                        'elevation' => $request->elevation,
+                        'slope' => null, // Can be added later
+                        'previous_crop' => $request->previous_crop ?? 'rice',
+                        'nickname' => $request->nickname,
+                        'planting_method' => $request->planting_method,
+                        'cropping_seasons' => $request->cropping_seasons,
+                        'target_yield' => $request->target_yield,
+                        'infrastructure_notes' => $request->infrastructure_notes,
+                        'field_preparation_status' => 'needs_assessment',
+                        'notes' => $this->generateFieldNotes($request),
+                    ]
+                );
+            }
 
             // Update user profile with farming experience
             $user->update([
@@ -128,42 +150,47 @@ class RiceFarmProfileController extends Controller
                     'total_area' => $request->total_area,
                     'rice_area' => $request->rice_area,
                     'farming_experience' => $request->farming_experience,
-                    'preferred_varieties' => $request->preferred_varieties,
-                    'planting_method' => $request->planting_method,
-                    'previous_yield' => $request->previous_yield,
-                    'target_yield' => $request->target_yield,
-                    'cropping_seasons' => $request->cropping_seasons,
-                    'farming_challenges' => $request->farming_challenges,
                 ]
             ]);
 
             DB::commit();
 
-            // Get field recommendations
-            $recommendations = $field->getPreparationRecommendations();
-            $suitabilityScore = $field->getProductivityScore();
-            $recommendedVarieties = $field->getRecommendedRiceVarieties();
+            // Prepare response data
+            $responseAnalysis = null;
+            $responseFields = [];
 
-            return response()->json([
-                'message' => 'Rice farm profile created successfully',
-                'farmProfile' => [
-                    'farm' => $farm,
-                    'field' => $field,
-                    'user_profile' => $user->address,
-                ],
-                'fields' => [$field],
-                'analysis' => [
+            if ($field) {
+                // Get field recommendations if field was created
+                $recommendations = $field->getPreparationRecommendations();
+                $suitabilityScore = $field->getProductivityScore();
+                $recommendedVarieties = $field->getRecommendedRiceVarieties();
+
+                $responseFields = [$field];
+                $responseAnalysis = [
                     'suitability_score' => $suitabilityScore,
                     'soil_fertility' => $field->getSoilFertilityStatus(),
                     'recommendations' => $recommendations,
                     'recommended_varieties' => $recommendedVarieties,
                     'is_suitable_for_rice' => $field->isSuitableForRice(),
-                ]
+                ];
+            }
+
+            return response()->json([
+                'message' => 'Rice farm profile created successfully',
+                'farmProfile' => [
+                    'farm' => $farm,
+                    'field' => $field, // This might be null now
+                    'user_profile' => $user->address,
+                ],
+                'fields' => $responseFields,
+                'analysis' => $responseAnalysis
             ], 201);
 
         } catch (\Exception $e) {
             DB::rollback();
-            
+            Log::error('Rice Profile Creation Error: ' . $e->getMessage());
+            Log::error($e->getTraceAsString());
+
             return response()->json([
                 'message' => 'Failed to create rice farm profile',
                 'error' => $e->getMessage()
@@ -177,39 +204,11 @@ class RiceFarmProfileController extends Controller
     private function generateFieldNotes(Request $request)
     {
         $notes = [];
-        
+
         if ($request->farming_experience) {
             $notes[] = "Farmer has {$request->farming_experience} years of rice farming experience.";
         }
-        
-        if ($request->previous_yield) {
-            $notes[] = "Previous average yield: {$request->previous_yield} tons/ha.";
-        }
-        
-        if ($request->target_yield) {
-            $notes[] = "Target yield: {$request->target_yield} tons/ha.";
-        }
-        
-        if ($request->preferred_varieties) {
-            $varieties = implode(', ', $request->preferred_varieties);
-            $notes[] = "Preferred rice varieties: {$varieties}.";
-        }
-        
-        if ($request->planting_method) {
-            $notes[] = "Preferred planting method: " . str_replace('_', ' ', $request->planting_method) . ".";
-        }
-        
-        if ($request->cropping_seasons) {
-            $notes[] = "Plans to grow {$request->cropping_seasons} season(s) per year.";
-        }
-        
-        if ($request->farming_challenges) {
-            $challenges = implode(', ', array_map(function($challenge) {
-                return str_replace('_', ' ', $challenge);
-            }, $request->farming_challenges));
-            $notes[] = "Main challenges: {$challenges}.";
-        }
-        
+
         return implode(' ', $notes);
     }
 
@@ -220,7 +219,7 @@ class RiceFarmProfileController extends Controller
     {
         try {
             $varieties = RiceVariety::getCurrentSeasonVarieties();
-            
+
             return response()->json([
                 'varieties' => $varieties,
                 'current_season' => (now()->month >= 5 && now()->month <= 10) ? 'wet' : 'dry'
@@ -240,14 +239,14 @@ class RiceFarmProfileController extends Controller
     {
         try {
             $field = Field::findOrFail($fieldId);
-            
+
             // Check if user owns this field
             if ($field->user_id !== auth()->id()) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
-            
+
             $recommendedVarieties = $field->getRecommendedRiceVarieties();
-            
+
             return response()->json([
                 'field' => $field,
                 'recommended_varieties' => $recommendedVarieties,
@@ -273,12 +272,12 @@ class RiceFarmProfileController extends Controller
     {
         try {
             $field = Field::with(['user', 'farm', 'plantings.riceVariety'])->findOrFail($fieldId);
-            
+
             // Check if user owns this field
             if ($field->user_id !== auth()->id()) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
-            
+
             return response()->json([
                 'field' => $field,
                 'analysis' => [
@@ -357,7 +356,7 @@ class RiceFarmProfileController extends Controller
             'rice_area' => 'nullable|numeric|min:0',
             'farming_experience' => 'nullable|integer|min:0',
             'farm_description' => 'nullable|string|max:1000',
-            
+
             // Soil Information
             'soil_type' => 'nullable|string|in:clay,loam,sandy,silt,clay_loam,sandy_loam,silty_clay,silty_loam',
             'soil_ph' => 'nullable|numeric|between:3.0,10.0',
@@ -366,22 +365,22 @@ class RiceFarmProfileController extends Controller
             'phosphorus_level' => 'nullable|numeric|min:0',
             'potassium_level' => 'nullable|numeric|min:0',
             'elevation' => 'nullable|numeric|min:0',
-            
+
+            // Cultivation Plans & Notes
+            'nickname' => 'nullable|string|max:255',
+            'planting_method' => 'nullable|string|max:255',
+            'cropping_seasons' => 'nullable|integer|min:1|max:3',
+            'target_yield' => 'nullable|numeric|min:0',
+            'infrastructure_notes' => 'nullable|string|max:1000',
+            'previous_crop' => 'nullable|string|max:255',
+
             // Water Management
             'water_source' => 'nullable|string|in:irrigation_canal,river,well,shallow_well,pond,rainfall,spring',
             'irrigation_type' => 'nullable|string|in:flood,furrow,sprinkler,drip,manual,none',
             'water_access' => 'nullable|string|in:excellent,good,moderate,poor,very_poor',
-            'drainage_quality' => 'nullable|string|in:excellent,good,moderate,poor',
-            
-            // Rice Varieties and Practices
-            'preferred_varieties' => 'nullable|array',
-            'preferred_varieties.*' => 'string',
-            'planting_method' => 'nullable|string|in:direct_seeding,transplanting,broadcasting,drilling',
-            'previous_yield' => 'nullable|numeric|min:0',
-            'target_yield' => 'nullable|numeric|min:0',
-            'cropping_seasons' => 'nullable|string|in:1,2,3',
-            'farming_challenges' => 'nullable|array',
-            'farming_challenges.*' => 'string',
+
+
+
         ]);
 
         if ($validator->fails()) {
@@ -419,7 +418,7 @@ class RiceFarmProfileController extends Controller
                 // Geocode location if provided
                 $coordinates = null;
                 $locationData = null;
-                
+
                 if ($request->has('location') && $request->location) {
                     $coordinates = $this->geocodeLocation($request->location);
                     $locationData = ['address' => $request->location];
@@ -428,38 +427,45 @@ class RiceFarmProfileController extends Controller
                         $locationData['lon'] = $coordinates['longitude'];
                     }
                 }
-                
-                $field = Field::updateOrCreate(
-                    [
-                        'user_id' => $user->id,
-                        'farm_id' => $farm->id,
-                        'name' => 'Main Rice Field'
-                    ],
-                    array_filter([
-                        'location' => $locationData,
-                        'field_coordinates' => $coordinates ? [
-                            'lat' => $coordinates['latitude'],
-                            'lon' => $coordinates['longitude']
-                        ] : null,
-                        'soil_type' => $request->soil_type ?? null,
-                        'soil_ph' => $request->soil_ph ?? null,
-                        'organic_matter_content' => $request->organic_matter_content ?? null,
-                        'nitrogen_level' => $request->nitrogen_level ?? null,
-                        'phosphorus_level' => $request->phosphorus_level ?? null,
-                        'potassium_level' => $request->potassium_level ?? null,
-                        'size' => $request->rice_area ?? null,
-                        'water_access' => $request->water_access ?? null,
-                        'water_source' => $request->water_source ?? null,
-                        'irrigation_type' => $request->irrigation_type ?? null,
-                        'drainage_quality' => $request->drainage_quality ?? null,
-                        'elevation' => $request->elevation ?? null,
-                        'notes' => $request->hasAny(['farming_experience', 'previous_yield', 'target_yield', 'preferred_varieties', 'planting_method', 'cropping_seasons', 'farming_challenges']) 
-                            ? $this->generateFieldNotes($request) 
-                            : null,
-                    ], function($value) {
-                        return $value !== null;
-                    })
-                );
+
+                $fieldData = array_filter([
+                    'location' => $locationData,
+                    'field_coordinates' => $coordinates ? [
+                        'lat' => $coordinates['latitude'],
+                        'lon' => $coordinates['longitude']
+                    ] : null,
+                    'soil_type' => $request->soil_type ?? null,
+                    'soil_ph' => $request->soil_ph ?? null,
+                    'organic_matter_content' => $request->organic_matter_content ?? null,
+                    'nitrogen_level' => $request->nitrogen_level ?? null,
+                    'phosphorus_level' => $request->phosphorus_level ?? null,
+                    'potassium_level' => $request->potassium_level ?? null,
+                    'size' => $request->rice_area ?? null,
+                    'water_access' => $request->water_access ?? null,
+                    'water_source' => $request->water_source ?? null,
+                    'irrigation_type' => $request->irrigation_type ?? null,
+                    'drainage_quality' => $request->drainage_quality ?? null,
+                    'elevation' => $request->elevation ?? null,
+                    'previous_crop' => $request->previous_crop ?? null,
+                    'nickname' => $request->nickname ?? null,
+                    'planting_method' => $request->planting_method ?? null,
+                    'cropping_seasons' => $request->cropping_seasons ?? null,
+                    'target_yield' => $request->target_yield ?? null,
+                    'infrastructure_notes' => $request->infrastructure_notes ?? null,
+                    'notes' => $request->has('farming_experience')
+                        ? $this->generateFieldNotes($request)
+                        : null,
+                ], function ($value) {
+                    return $value !== null;
+                });
+
+                $field = Field::where('farm_id', $farm->id)->first();
+
+                if ($field) {
+                    $field->update($fieldData);
+                }
+                // If no field exists, do NOT create one here.
+                // Field creation should be done explicitly through the fields endpoint.
             }
 
             // Update user profile
@@ -475,24 +481,6 @@ class RiceFarmProfileController extends Controller
             }
             if ($request->has('farming_experience')) {
                 $addressData['farming_experience'] = $request->farming_experience;
-            }
-            if ($request->has('preferred_varieties')) {
-                $addressData['preferred_varieties'] = $request->preferred_varieties;
-            }
-            if ($request->has('planting_method')) {
-                $addressData['planting_method'] = $request->planting_method;
-            }
-            if ($request->has('previous_yield')) {
-                $addressData['previous_yield'] = $request->previous_yield;
-            }
-            if ($request->has('target_yield')) {
-                $addressData['target_yield'] = $request->target_yield;
-            }
-            if ($request->has('cropping_seasons')) {
-                $addressData['cropping_seasons'] = $request->cropping_seasons;
-            }
-            if ($request->has('farming_challenges')) {
-                $addressData['farming_challenges'] = $request->farming_challenges;
             }
 
             $user->update(['address' => $addressData]);
@@ -514,7 +502,7 @@ class RiceFarmProfileController extends Controller
 
         } catch (\Exception $e) {
             DB::rollback();
-            
+
             return response()->json([
                 'message' => 'Failed to update profile',
                 'error' => $e->getMessage()
@@ -530,7 +518,7 @@ class RiceFarmProfileController extends Controller
         try {
             $weatherService = app(OpenWeatherAPIService::class);
             $coordinates = $weatherService->getCoordinates($location);
-            
+
             if ($coordinates) {
                 Log::info('Geocoded location', [
                     'location' => $location,
@@ -538,7 +526,7 @@ class RiceFarmProfileController extends Controller
                 ]);
                 return $coordinates;
             }
-            
+
             Log::warning('Failed to geocode location', ['location' => $location]);
             return null;
         } catch (\Exception $e) {

@@ -15,6 +15,15 @@ export default defineConfig({
     resolve: {
         alias: {
             '@': '/resources/js',
+            '@assets': '/resources/assets',
+        },
+    },
+    server: {
+        host: '0.0.0.0', // Allow connections from any IP
+        allowedHosts: true, // ✅ Allow ngrok URLs
+        hmr: {
+            host: process.env.VITE_HMR_HOST || '182.40.7.38',
+            clientPort: process.env.VITE_HMR_HOST ? 443 : 5173,
         },
     },
 });

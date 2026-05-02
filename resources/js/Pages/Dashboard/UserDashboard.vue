@@ -1,5 +1,5 @@
 <template>
-  <div class="p-6 max-w-7xl mx-auto">
+  <div class="p-6 w-full mx-auto">
     <!-- Header -->
     <div class="mb-8">
       <h1 class="text-3xl font-bold text-gray-900">Rice Marketplace</h1>
@@ -170,7 +170,7 @@
           <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
             <h2 class="text-lg font-semibold text-gray-900">Recent Orders</h2>
             <router-link
-              to="/marketplace/orders"
+              to="/buyer/orders"
               class="text-sm text-green-600 hover:text-green-700 font-medium"
             >
               View all orders
@@ -255,7 +255,7 @@
             </router-link>
             
             <router-link
-              to="/marketplace/cart"
+              to="/cart"
               class="flex items-center p-3 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
             >
               <ShoppingBagIcon class="w-5 h-5 mr-3 text-blue-600" />
@@ -263,7 +263,7 @@
             </router-link>
             
             <router-link
-              to="/marketplace/favorites"
+              to="/favorites"
               class="flex items-center p-3 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
             >
               <HeartIcon class="w-5 h-5 mr-3 text-red-600" />
@@ -408,11 +408,11 @@ const formatOrderStatus = (status) => {
 };
 
 const viewProduct = (productId) => {
-  router.push(`/marketplace/product/${productId}`);
+  router.push(`/marketplace/products/${productId}`);
 };
 
 const viewOrder = (orderId) => {
-  router.push(`/marketplace/orders/${orderId}`);
+  router.push(`/buyer/orders/${orderId}`);
 };
 
 const searchByVariety = (varietyId) => {
@@ -458,7 +458,10 @@ const loadDashboardData = async () => {
       sort_order: 'desc',
       per_page: 4 
     });
-    featuredProducts.value = (productsResponse.data.data || productsResponse.data || []).slice(0, 4);
+    // Extract products from response - API returns { products: { data: [...] } } for paginated or { products: [...] }
+    const productsPayload = productsResponse.data?.products;
+    const productsList = productsPayload?.data || productsPayload || [];
+    featuredProducts.value = (Array.isArray(productsList) ? productsList : []).slice(0, 4);
     
     // Load popular rice varieties
     const varietiesResponse = await riceVarietiesAPI.getAll();

@@ -1,59 +1,73 @@
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50">
-    <header class="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200 sticky top-0 z-10">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between py-6 gap-4">
-          <div>
-            <div class="flex items-center gap-3">
-              <div class="h-10 w-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
-                <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                </svg>
-              </div>
-              <div>
-                <h1 class="text-2xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">Harvests</h1>
-                <p class="text-sm text-gray-600 mt-0.5">
-                  Log and manage all your crop yields and performance.
-                </p>
-              </div>
-            </div>
-          </div>
-          <div class="flex items-center gap-3">
-            <button
-              @click="refreshHarvests"
-              :disabled="loading"
-              class="inline-flex items-center px-4 py-2.5 text-sm font-medium rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 transition-all duration-200 shadow-sm hover:shadow"
+  <div class="min-h-screen bg-gray-50">
+    <div class="container mx-auto px-4 py-8">
+      <!-- Standard Header -->
+      <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+        <div>
+          <h1 class="text-3xl font-bold text-gray-800">Harvests</h1>
+          <p class="text-gray-500 mt-1">Log and manage all your crop yields and performance.</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <button
+            @click="refreshHarvests"
+            :disabled="loading"
+            class="flex items-center gap-2 bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors shadow-sm font-medium disabled:opacity-50"
+          >
+            <svg
+              :class="['h-5 w-5', { 'animate-spin': loading }]"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              <svg
-                :class="['h-4 w-4 mr-2', { 'animate-spin': loading }]"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-              Refresh
-            </button>
-            <button
-              @click="openCreateModal"
-              class="inline-flex items-center px-5 py-2.5 text-sm font-semibold rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-            >
-              <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              Add Harvest
-            </button>
-          </div>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Refresh
+          </button>
+          <button
+            @click="openCreateModal"
+            class="flex items-center gap-2 bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-green-700 transition-colors shadow-sm font-medium"
+          >
+            <span class="text-xl leading-none">+</span> Add Harvest
+          </button>
         </div>
       </div>
-    </header>
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <!-- Filter Bar -->
+      <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-6 flex flex-col md:flex-row gap-3 items-center">
+        <!-- Field/Name Search -->
+        <div class="flex-1 relative w-full">
+          <span class="absolute left-3 top-2.5 text-gray-400">🔍</span>
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Search by field name…"
+            class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-sm"
+          />
+        </div>
+
+        <!-- Processing Status Filter -->
+        <select
+          v-model="processingFilter"
+          class="w-full md:w-52 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none bg-white text-sm"
+        >
+          <option value="">All Status</option>
+          <option value="unprocessed">Unprocessed</option>
+          <option value="threshed">Threshed</option>
+          <option value="dried">Dried</option>
+          <option value="milled">Milled</option>
+        </select>
+
+        <!-- Clear Filters -->
+        <button
+          v-if="searchQuery || processingFilter"
+          @click="clearFilters"
+          class="whitespace-nowrap text-sm text-gray-500 hover:text-red-600 transition-colors px-3 py-2 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50"
+        >
+          ✕ Clear
+        </button>
+      </div>
+
+      <div>
       <div v-if="error" class="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
         <div class="flex">
           <div class="flex-shrink-0">
@@ -73,7 +87,24 @@
         </div>
       </div>
 
-      <div v-else-if="loading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div
+        v-if="route.query.focus === 'processing' && !error"
+        class="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 shadow-sm"
+      >
+        <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 class="text-sm font-semibold text-amber-900">Post-Harvest Processing</h2>
+            <p class="text-sm text-amber-800">
+              Choose a harvest and click <span class="font-semibold">Process</span> to record threshing, drying, or milling before publishing to the marketplace.
+            </p>
+          </div>
+          <span class="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-medium text-amber-700">
+            Flexible workflow enabled
+          </span>
+        </div>
+      </div>
+
+      <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div
           v-for="n in 6"
           :key="n"
@@ -90,6 +121,7 @@
       </div>
 
       <div v-else>
+        <!-- No harvests at all -->
         <div v-if="harvests.length === 0" class="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-12 text-center border border-gray-100">
           <div class="inline-flex items-center justify-center h-20 w-20 bg-gradient-to-br from-green-100 to-emerald-100 rounded-2xl mb-6">
             <svg class="h-10 w-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -98,7 +130,7 @@
           </div>
           <h2 class="text-2xl font-bold text-gray-900 mb-2">No harvests logged</h2>
           <p class="text-sm text-gray-600 mb-8 max-w-md mx-auto">
-            Log your first harvest to track yield, quality, and financial performance.
+            Log your first harvest to track yield and financial performance.
           </p>
           <button
             @click="openCreateModal"
@@ -111,9 +143,20 @@
           </button>
         </div>
 
+        <!-- Filters returned no results -->
+        <div
+          v-else-if="filteredHarvests.length === 0"
+          class="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-12 text-center border border-gray-100"
+        >
+          <div class="text-5xl mb-4">🌾</div>
+          <h2 class="text-xl font-bold text-gray-900 mb-2">No harvests match your filters</h2>
+          <p class="text-sm text-gray-500 mb-6">Try adjusting or clearing the filters above.</p>
+          <button @click="clearFilters" class="text-sm text-green-700 hover:underline font-medium">Clear filters</button>
+        </div>
+
         <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <article
-            v-for="harvest in harvests"
+            v-for="harvest in filteredHarvests"
             :key="harvest.id"
             class="group bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 border border-gray-100 overflow-hidden"
           >
@@ -141,13 +184,6 @@
                       </div>
                     </div>
                   </div>
-                  <span
-                    v-if="harvest.quality_grade"
-                    class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold shadow-sm"
-                    :class="qualityClass(harvest.quality_grade)"
-                  >
-                    Grade {{ harvest.quality_grade }}
-                  </span>
                 </div>
 
                 <!-- Crop Variety -->
@@ -221,9 +257,18 @@
               <!-- Footer Actions -->
               <div class="mt-auto pt-4 border-t border-gray-200">
                 <div class="flex divide-x divide-gray-200">
+                  <router-link
+                    :to="`/harvests/${harvest.id}/processing`"
+                    class="flex-1 inline-flex items-center justify-center py-3 text-sm font-medium text-emerald-700 hover:bg-emerald-50 rounded-bl-2xl transition-colors"
+                  >
+                    <svg class="h-4 w-4 mr-2 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                    </svg>
+                    Process
+                  </router-link>
                   <button
                     @click="openEditModal(harvest)"
-                    class="flex-1 inline-flex items-center justify-center py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-bl-2xl transition-colors"
+                    class="flex-1 inline-flex items-center justify-center py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
                   >
                     <svg class="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L13.196 5.232z" />
@@ -245,23 +290,38 @@
           </article>
         </div>
       </div>
-    </main>
+      </div>
+    </div>
 
     <HarvestFormModal
       :show="isModalOpen"
       :harvest="selectedHarvest"
       @close="closeModal"
     />
+    
+    <!-- Confirmation Modal -->
+    <ConfirmationModal
+      :show="showConfirmModal"
+      title="Delete Harvest"
+      :message="`Are you sure you want to delete this harvest of ${harvestToDelete?.quantity || 0} ${harvestToDelete?.unit || 'kg'}? This cannot be undone.`"
+      confirm-text="Delete"
+      type="danger"
+      @close="showConfirmModal = false"
+      @confirm="deleteHarvest"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useFarmStore } from '@/stores/farm'
-import HarvestFormModal from './HarvestFormModal.vue' // Import the new modal
+import HarvestFormModal from './HarvestFormModal.vue'
+import ConfirmationModal from '@/Components/UI/ConfirmationModal.vue'
+import { formatCurrency } from '@/utils/format'
 
 const router = useRouter()
+const route = useRoute()
 const farmStore = useFarmStore()
 
 const loading = ref(true)
@@ -269,7 +329,60 @@ const error = ref('')
 const isModalOpen = ref(false)
 const selectedHarvest = ref(null)
 
+// Confirmation State
+const showConfirmModal = ref(false)
+const harvestToDelete = ref(null)
+
+// Filters
+const searchQuery = ref('')
+const processingFilter = ref('')
+
 const harvests = computed(() => farmStore.harvests || [])
+
+/**
+ * Derive the processing status of a harvest from its postHarvestProcesses.
+ * Returns: 'unprocessed' | 'threshed' | 'dried' | 'milled'
+ */
+const getProcessingStatus = (harvest) => {
+  const processes = harvest.post_harvest_processes || harvest.postHarvestProcesses || []
+  const completed = processes.filter(p => p.status === 'completed')
+  if (!completed.length) return 'unprocessed'
+  // Choose the most advanced step
+  const order = ['threshing', 'drying', 'milling']
+  let best = 'unprocessed'
+  completed.forEach(p => {
+    const idx = order.indexOf(p.process_type)
+    if (idx === 0 && best === 'unprocessed') best = 'threshed'
+    if (idx === 1 && best !== 'milled') best = 'dried'
+    if (idx === 2) best = 'milled'
+  })
+  return best
+}
+
+const filteredHarvests = computed(() => {
+  return harvests.value.filter(harvest => {
+    // Field name search
+    const search = searchQuery.value.toLowerCase().trim()
+    if (search) {
+      const fieldName = (harvest.planting?.field?.name || '').toLowerCase()
+      const variety = (harvest.planting?.riceVariety?.name || harvest.planting?.crop_type || '').toLowerCase()
+      if (!fieldName.includes(search) && !variety.includes(search)) return false
+    }
+
+    // Processing status filter
+    if (processingFilter.value) {
+      const status = getProcessingStatus(harvest)
+      if (status !== processingFilter.value) return false
+    }
+
+    return true
+  })
+})
+
+const clearFilters = () => {
+  searchQuery.value = ''
+  processingFilter.value = ''
+}
 
 // --- Modal Controls ---
 const openCreateModal = () => {
@@ -302,16 +415,22 @@ const refreshHarvests = async () => {
 }
 
 // --- CRUD Actions ---
-const confirmDelete = async (harvest) => {
-  const harvestName = `${harvest.quantity} ${harvest.unit}`
-  if (window.confirm(`Are you sure you want to delete this harvest of "${harvestName}"? This cannot be undone.`)) {
-    try {
-      await farmStore.deleteHarvest(harvest.id)
-      // Store action will optimistically remove it from the list
-    } catch (err) {
-      console.error('Failed to delete harvest:', err)
-      error.value = err.userMessage || err.response?.data?.message || 'Unable to delete harvest.'
-    }
+const confirmDelete = (harvest) => {
+  harvestToDelete.value = harvest
+  showConfirmModal.value = true
+}
+
+const deleteHarvest = async () => {
+  if (!harvestToDelete.value) return
+  showConfirmModal.value = false
+  
+  try {
+    await farmStore.deleteHarvest(harvestToDelete.value.id)
+    // Store action will optimistically remove it from the list
+    harvestToDelete.value = null
+  } catch (err) {
+    console.error('Failed to delete harvest:', err)
+    error.value = err.userMessage || err.response?.data?.message || 'Unable to delete harvest.'
   }
 }
 
@@ -327,22 +446,8 @@ const formatDate = (value) => {
   }
 }
 
-const formatCurrency = (value) => {
-  if (value === null || value === undefined || value === '') return 'N/A'
-  const num = Number(value)
-  if (Number.isNaN(num)) return 'Invalid'
-  return num.toLocaleString('en-US', { style: 'currency', currency: 'PHP' }) // Assuming PHP
-}
+// formatCurrency removed in favor of imported util
 
-const qualityClass = (grade) => {
-  const classes = {
-    A: 'bg-green-100 text-green-800',
-    B: 'bg-blue-100 text-blue-800',
-    C: 'bg-yellow-100 text-yellow-800',
-    D: 'bg-red-100 text-red-800',
-  }
-  return classes[grade] || 'bg-gray-100 text-gray-800'
-}
 
 // --- Lifecycle ---
 onMounted(() => {
@@ -353,6 +458,13 @@ onMounted(() => {
   // as they are needed for the create/edit modal dropdown
   if (farmStore.plantings.length === 0) {
     farmStore.fetchPlantings().catch(err => console.warn('BG fetch plantings failed', err))
+  }
+  
+  // Auto-open modal if action query parameter is set to create
+  if (route.query.action === 'create') {
+    openCreateModal()
+    // Remove query string from tracking history
+    router.replace({ path: route.path })
   }
 })
 </script>

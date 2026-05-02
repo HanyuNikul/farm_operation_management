@@ -24,6 +24,80 @@
         </div>
       </div>
 
+      <!-- Stats Bar (Farmers Only) -->
+      <div v-if="isFarmer && !statsLoading" class="bg-white rounded-xl shadow-lg p-6 mb-6 border border-gray-100">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <!-- Total Revenue -->
+          <div class="text-center">
+            <div class="flex items-center justify-center mb-2">
+              <span class="text-2xl">💰</span>
+            </div>
+            <div class="text-2xl font-bold text-gray-900">{{ formatCurrency(orderStats.total_revenue || 0) }}</div>
+            <div class="text-sm text-gray-500">Total Revenue</div>
+          </div>
+          
+          <!-- Total Orders -->
+          <div class="text-center">
+            <div class="flex items-center justify-center mb-2">
+              <span class="text-2xl">📦</span>
+            </div>
+            <div class="text-2xl font-bold text-gray-900">{{ orderStats.total_orders || 0 }}</div>
+            <div class="text-sm text-gray-500">Total Orders</div>
+          </div>
+          
+          <!-- Completed -->
+          <div class="text-center">
+            <div class="flex items-center justify-center mb-2">
+              <span class="text-2xl">✅</span>
+            </div>
+            <div class="text-2xl font-bold text-green-600">{{ orderStats.delivered || 0 }}</div>
+            <div class="text-sm text-gray-500">Completed</div>
+          </div>
+          
+          <!-- Pending -->
+          <div class="text-center">
+            <div class="flex items-center justify-center mb-2">
+              <span class="text-2xl">⏳</span>
+            </div>
+            <div class="text-2xl font-bold text-yellow-600">{{ orderStats.pending || 0 }}</div>
+            <div class="text-sm text-gray-500">Pending</div>
+          </div>
+        </div>
+        
+        <!-- Mini Revenue Chart -->
+        <div v-if="orderStats.revenue_trend && orderStats.revenue_trend.length > 0" class="mt-6 pt-4 border-t border-gray-100">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-sm font-medium text-gray-600">Revenue Trend (Last 7 Days)</span>
+            <span class="text-xs text-gray-400">{{ formatCurrency(getTotalTrendRevenue()) }}</span>
+          </div>
+          <div class="flex items-end justify-between h-12 gap-1">
+            <div
+              v-for="(day, index) in orderStats.revenue_trend"
+              :key="index"
+              class="flex-1 flex flex-col items-center"
+            >
+              <div
+                class="w-full bg-gradient-to-t from-emerald-500 to-emerald-400 rounded-t transition-all duration-300 hover:from-emerald-600 hover:to-emerald-500"
+                :style="{ height: getBarHeight(day.revenue) + '%', minHeight: day.revenue > 0 ? '4px' : '2px' }"
+                :title="formatCurrency(day.revenue) + ' on ' + day.day"
+              ></div>
+              <span class="text-xs text-gray-400 mt-1">{{ day.day }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats Loading State -->
+      <div v-if="isFarmer && statsLoading" class="bg-white rounded-xl shadow-lg p-6 mb-6 animate-pulse">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div v-for="i in 4" :key="i" class="text-center">
+            <div class="h-8 w-8 bg-gray-200 rounded-full mx-auto mb-2"></div>
+            <div class="h-6 bg-gray-200 rounded w-20 mx-auto mb-1"></div>
+            <div class="h-4 bg-gray-100 rounded w-16 mx-auto"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Tabs -->
       <div class="bg-white rounded-lg shadow-md mb-6">
         <div class="border-b border-gray-200">
@@ -67,10 +141,11 @@
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Status</option>
+              <option value="negotiating">Negotiating</option>
               <option value="pending">Pending</option>
-              <option value="processing">Processing</option>
-              <option value="shipped">Shipped</option>
-              <option value="delivered">Delivered</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="ready_for_pickup">Ready for Pickup</option>
+              <option value="picked_up">Picked Up</option>
               <option value="cancelled">Cancelled</option>
             </select>
           </div>
@@ -137,22 +212,40 @@
                 :class="getStatusBadgeClass(order.status)"
                 class="px-2 py-1 text-xs font-medium rounded-full capitalize"
               >
-                {{ order.status }}
+                {{ formatStatus(order.status) }}
+              </span>
+              <span
+                v-if="order.payment_status === 'paid'"
+                class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800 ml-1"
+              >
+                Paid
+              </span>
+              <span
+                v-else
+                class="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800 ml-1"
+              >
+                Unpaid
               </span>
             </div>
           </div>
           
           <div class="space-y-3">
             <div class="flex items-center space-x-4 p-3 bg-gray-50 rounded-lg">
-              <div class="w-12 h-12 bg-gray-200 rounded flex items-center justify-center">
-                <span class="text-2xl">🌾</span>
+              <div class="w-12 h-12 bg-gray-200 rounded flex items-center justify-center overflow-hidden">
+                <img
+                  v-if="order.rice_product?.images?.length"
+                  :src="order.rice_product.images[0]"
+                  :alt="order.rice_product?.name"
+                  class="w-full h-full object-cover"
+                />
+                <span v-else class="text-2xl">🌾</span>
               </div>
               <div class="flex-1">
                 <h4 class="font-medium text-gray-900">
                   {{ order.rice_product?.name || 'Rice product' }}
                 </h4>
                 <p class="text-sm text-gray-600">
-                  Qty: {{ order.quantity }} {{ order.rice_product?.unit || 'sacks' }}
+                  Qty: {{ order.quantity }} {{ order.rice_product?.unit || 'kg' }}
                 </p>
               </div>
               <div class="text-right text-sm text-gray-600">
@@ -166,9 +259,9 @@
             <div v-if="order.is_pre_order" class="text-sm text-yellow-700">
               Available {{ order.available_date ? formatDate(order.available_date) : 'soon' }}
             </div>
-            <div v-if="order.delivery_address" class="text-sm text-gray-600">
-              <span class="font-medium">Deliver to:</span>
-              {{ order.delivery_address.street || 'Customer provided address' }}
+            <div class="text-sm text-gray-600">
+              <span class="font-medium">Ordered by: </span>
+              <span>{{ order.buyer?.name || 'Unknown buyer' }}</span>
             </div>
           </div>
           
@@ -233,6 +326,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import axios from 'axios'
 import { formatCurrency } from '@/utils/format'
 import { useMarketplaceStore } from '@/stores/marketplace'
 import { useAuthStore } from '@/stores/auth'
@@ -253,6 +347,10 @@ const statusFilter = ref('')
 const dateFilter = ref('')
 const currentPage = ref(1)
 const ordersError = ref('')
+
+// Order stats for farmers
+const orderStats = ref({})
+const statsLoading = ref(false)
 
 const ordersLoading = computed(() => marketplaceStore.loading)
 const orders = computed(() => marketplaceStore.orders || [])
@@ -352,7 +450,7 @@ const filteredOrders = computed(() => {
 })
 
 const paginationSummary = computed(() => {
-  if (!pagination.value) return ''
+  if (!pagination.value || !pagination.value.current_page || !pagination.value.last_page) return ''
   return `Page ${pagination.value.current_page} of ${pagination.value.last_page}`
 })
 
@@ -390,13 +488,27 @@ const formatDate = (date) => {
   return new Date(date).toLocaleDateString()
 }
 
+const formatStatus = (status) => {
+  if (!status) return ''
+  const labels = {
+    negotiating: 'Negotiating',
+    pending: 'Pending',
+    confirmed: 'Confirmed',
+    ready_for_pickup: 'Ready for Pickup',
+    picked_up: 'Picked Up',
+    cancelled: 'Cancelled',
+    disputed: 'Disputed'
+  }
+  return labels[status] || status.charAt(0).toUpperCase() + status.slice(1)
+}
+
 const getStatusBadgeClass = (status) => {
   const classes = {
+    negotiating: 'bg-orange-100 text-orange-800',
     pending: 'bg-yellow-100 text-yellow-800',
     confirmed: 'bg-blue-100 text-blue-800',
-    processing: 'bg-purple-100 text-purple-800',
-    shipped: 'bg-indigo-100 text-indigo-800',
-    delivered: 'bg-green-100 text-green-800',
+    ready_for_pickup: 'bg-purple-100 text-purple-800',
+    picked_up: 'bg-green-100 text-green-800',
     cancelled: 'bg-red-100 text-red-800'
   }
   return classes[status] || 'bg-gray-100 text-gray-800'
@@ -415,8 +527,38 @@ const sellProduct = () => {
   router.push('/marketplace/product/create')
 }
 
+// Fetch order stats for farmers
+const loadOrderStats = async () => {
+  if (!isFarmer.value) return
+  
+  statsLoading.value = true
+  try {
+    const { data } = await axios.get('/api/rice-marketplace/farmer/order-stats')
+    orderStats.value = data.stats || {}
+  } catch (err) {
+    console.error('Failed to load order stats:', err)
+  } finally {
+    statsLoading.value = false
+  }
+}
+
+// Helper function for sparkline bar height
+const getBarHeight = (revenue) => {
+  if (!orderStats.value.revenue_trend || orderStats.value.revenue_trend.length === 0) return 0
+  const maxRevenue = Math.max(...orderStats.value.revenue_trend.map(d => d.revenue))
+  if (maxRevenue === 0) return 10
+  return Math.max((revenue / maxRevenue) * 100, 5)
+}
+
+// Get total revenue from trend
+const getTotalTrendRevenue = () => {
+  if (!orderStats.value.revenue_trend) return 0
+  return orderStats.value.revenue_trend.reduce((sum, day) => sum + day.revenue, 0)
+}
+
 onMounted(() => {
   loadOrders()
+  loadOrderStats()
 })
 </script>
 

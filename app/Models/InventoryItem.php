@@ -5,8 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
 class InventoryItem extends Model
 {
+    use HasFactory;
 
     protected $fillable = [
         'name',
@@ -29,6 +32,7 @@ class InventoryItem extends Model
         'minimum_stock' => 'decimal:2',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'expiry_date' => 'date',
     ];
 
     /**
@@ -41,9 +45,20 @@ class InventoryItem extends Model
     const CATEGORY_PRODUCE = 'produce';
 
     /**
+     * All available categories
+     */
+    const CATEGORIES = [
+        self::CATEGORY_SEEDS,
+        self::CATEGORY_FERTILIZER,
+        self::CATEGORY_PESTICIDE,
+        self::CATEGORY_EQUIPMENT,
+        self::CATEGORY_PRODUCE,
+    ];
+
+    /**
      * Get the order items for this inventory item
      */
-    public function orderItems()
+    public function orderItems(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(OrderItem::class);
     }

@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Laborer;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class LaborerController extends Controller
 {
@@ -16,20 +18,20 @@ class LaborerController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        
+
         $query = Laborer::where('user_id', $user->id);
-        
+
         // Apply filters
         if ($request->has('status')) {
             $query->where('status', $request->status);
         }
-        
+
         if ($request->has('skill_level')) {
             $query->where('skill_level', $request->skill_level);
         }
-        
-        $laborers = $query->orderBy('name')->get();
-        
+
+        $laborers = $query->with('groups')->orderBy('name')->get();
+
         return response()->json([
             'laborers' => $laborers
         ]);
@@ -47,11 +49,15 @@ class LaborerController extends Controller
             'address' => 'nullable|string',
             'skill_level' => 'required|string|in:beginner,intermediate,advanced,expert',
             'specialization' => 'nullable|string|max:255',
-            'hourly_rate' => 'required|numeric|min:0',
+            'rate' => 'nullable|numeric|min:0',
+            'rate_type' => 'required|string|in:daily,per_job,share',
             'status' => 'required|string|in:active,inactive,on_leave',
             'hire_date' => 'required|date',
-            'emergency_contact' => 'nullable|string|max:255',
+            'emergency_contact_name' => 'nullable|string|max:255',
+            'emergency_contact_phone' => 'nullable|string|max:20',
             'notes' => 'nullable|string',
+            'groups' => 'nullable|array',
+            'groups.*' => 'exists:laborer_groups,id',
         ]);
 
         if ($validator->fails()) {
@@ -68,13 +74,21 @@ class LaborerController extends Controller
             'address' => $request->address,
             'skill_level' => $request->skill_level,
             'specialization' => $request->specialization,
-            'hourly_rate' => $request->hourly_rate,
+            'rate' => $request->rate_type === 'per_job' ? null : $request->rate,
+            'rate_type' => $request->rate_type,
             'status' => $request->status,
             'hire_date' => $request->hire_date,
-            'emergency_contact' => $request->emergency_contact,
+            'emergency_contact_name' => $request->emergency_contact_name,
+            'emergency_contact_phone' => $request->emergency_contact_phone,
             'notes' => $request->notes,
             'user_id' => $request->user()->id,
         ]);
+
+        if ($request->has('groups')) {
+            $laborer->groups()->sync($request->groups);
+        }
+
+        $laborer->load('groups');
 
         return response()->json([
             'message' => 'Laborer created successfully',
@@ -88,14 +102,14 @@ class LaborerController extends Controller
     public function show(Request $request, Laborer $laborer): JsonResponse
     {
         $user = $request->user();
-        
+
         if ($laborer->user_id !== $user->id) {
             return response()->json([
                 'message' => 'Unauthorized access'
             ], 403);
         }
 
-        $laborer->load(['tasks', 'wages']);
+        $laborer->load(['tasks', 'wages', 'groups']);
 
         return response()->json([
             'laborer' => $laborer
@@ -108,7 +122,7 @@ class LaborerController extends Controller
     public function update(Request $request, Laborer $laborer): JsonResponse
     {
         $user = $request->user();
-        
+
         if ($laborer->user_id !== $user->id) {
             return response()->json([
                 'message' => 'Unauthorized access'
@@ -122,11 +136,15 @@ class LaborerController extends Controller
             'address' => 'nullable|string',
             'skill_level' => 'sometimes|required|string|in:beginner,intermediate,advanced,expert',
             'specialization' => 'nullable|string|max:255',
-            'hourly_rate' => 'sometimes|required|numeric|min:0',
+            'rate' => 'nullable|numeric|min:0',
+            'rate_type' => 'sometimes|required|string|in:daily,per_job,share',
             'status' => 'sometimes|required|string|in:active,inactive,on_leave',
             'hire_date' => 'sometimes|required|date',
-            'emergency_contact' => 'nullable|string|max:255',
+            'emergency_contact_name' => 'nullable|string|max:255',
+            'emergency_contact_phone' => 'nullable|string|max:20',
             'notes' => 'nullable|string',
+            'groups' => 'nullable|array',
+            'groups.*' => 'exists:laborer_groups,id',
         ]);
 
         if ($validator->fails()) {
@@ -137,10 +155,26 @@ class LaborerController extends Controller
         }
 
         $laborer->update($request->only([
-            'name', 'phone', 'email', 'address', 'skill_level',
-            'specialization', 'hourly_rate', 'status', 'hire_date',
-            'emergency_contact', 'notes'
+            'name',
+            'phone',
+            'email',
+            'address',
+            'skill_level',
+            'specialization',
+            'rate',
+            'rate_type',
+            'status',
+            'hire_date',
+            'emergency_contact_name',
+            'emergency_contact_phone',
+            'notes'
         ]));
+
+        if ($request->has('groups')) {
+            $laborer->groups()->sync($request->groups);
+        }
+
+        $laborer->load('groups');
 
         return response()->json([
             'message' => 'Laborer updated successfully',
@@ -154,11 +188,19 @@ class LaborerController extends Controller
     public function destroy(Request $request, Laborer $laborer): JsonResponse
     {
         $user = $request->user();
-        
+
         if ($laborer->user_id !== $user->id) {
             return response()->json([
                 'message' => 'Unauthorized access'
             ], 403);
+        }
+
+        // Clean up profile picture if exists
+        if ($laborer->profile_picture) {
+            $path = str_replace(asset('storage/'), '', $laborer->profile_picture);
+            if (Storage::disk('public')->exists($path)) {
+                Storage::disk('public')->delete($path);
+            }
         }
 
         $laborer->delete();
@@ -174,7 +216,7 @@ class LaborerController extends Controller
     public function performance(Request $request, Laborer $laborer): JsonResponse
     {
         $user = $request->user();
-        
+
         if ($laborer->user_id !== $user->id) {
             return response()->json([
                 'message' => 'Unauthorized access'
@@ -182,11 +224,11 @@ class LaborerController extends Controller
         }
 
         $tasks = $laborer->tasks();
-        
+
         if ($request->has('date_from')) {
             $tasks->where('created_at', '>=', $request->date_from);
         }
-        
+
         if ($request->has('date_to')) {
             $tasks->where('created_at', '<=', $request->date_to);
         }
@@ -206,5 +248,112 @@ class LaborerController extends Controller
                 'total_wages' => $totalWages,
             ]
         ]);
+    }
+
+    /**
+     * Upload profile photo for a laborer
+     */
+    public function uploadPhoto(Request $request, Laborer $laborer): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($laborer->user_id !== $user->id) {
+            return response()->json([
+                'message' => 'Unauthorized access'
+            ], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'photo' => 'required|image|mimes:jpg,jpeg,png,webp|max:2048',
+        ], [
+            'photo.required' => 'Please select an image to upload.',
+            'photo.image' => 'The file must be an image.',
+            'photo.mimes' => 'Only JPG, JPEG, PNG, and WebP images are allowed.',
+            'photo.max' => 'The image must be less than 2MB.',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            // Delete old photo if exists
+            if ($laborer->profile_picture) {
+                $oldPath = str_replace(asset('storage/'), '', $laborer->profile_picture);
+                if (Storage::disk('public')->exists($oldPath)) {
+                    Storage::disk('public')->delete($oldPath);
+                }
+            }
+
+            // Generate unique filename
+            $photo = $request->file('photo');
+            $filename = Str::uuid() . '.' . $photo->getClientOriginalExtension();
+
+            // Store in public disk under laborers directory
+            $path = $photo->storeAs('laborers', $filename, 'public');
+
+            // Generate public URL
+            $url = asset('storage/' . $path);
+
+            // Update laborer profile picture
+            $laborer->update(['profile_picture' => $url]);
+
+            return response()->json([
+                'message' => 'Profile picture uploaded successfully',
+                'profile_picture' => $url
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to upload profile picture',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete profile photo for a laborer
+     */
+    public function deletePhoto(Request $request, Laborer $laborer): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($laborer->user_id !== $user->id) {
+            return response()->json([
+                'message' => 'Unauthorized access'
+            ], 403);
+        }
+
+        try {
+            if ($laborer->profile_picture) {
+                // Extract path from URL
+                $path = str_replace(asset('storage/'), '', $laborer->profile_picture);
+
+                // Delete file if exists
+                if (Storage::disk('public')->exists($path)) {
+                    Storage::disk('public')->delete($path);
+                }
+
+                // Clear profile picture in database
+                $laborer->update(['profile_picture' => null]);
+
+                return response()->json([
+                    'message' => 'Profile picture deleted successfully'
+                ]);
+            }
+
+            return response()->json([
+                'message' => 'No profile picture to delete'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to delete profile picture',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }
